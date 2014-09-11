@@ -222,7 +222,8 @@ void convolver_convolvechans(t_convolver *x, t_symbol *msg, short argc, t_atom *
     source->b_samples = buffer_locksamples(source->b);
     dest->b_samples = buffer_locksamples(dest->b);
     
-//	post("chans %d %d %d", source_chan, impulse_chan, dest_chan);
+//	post("chans source: %d imp: %d dest: %d", source_chan, impulse_chan, dest_chan);
+
 	if( source_chan <= 0 || impulse_chan <= 0 || dest_chan <= 0){
 		error("%s: channels are counted starting from 1",OBJECT_NAME);
 		return;
@@ -266,18 +267,18 @@ void convolver_convolvechans(t_convolver *x, t_symbol *msg, short argc, t_atom *
 		if( (trigland = (float *) sysmem_newptrclear(N * 2 * sizeof(float))) == NULL)
 			error("%s: insufficient memory",OBJECT_NAME);
 	}
-	
+
 	// crashes, but why ???
 	x->mult = 1. / (float) N;
 	x->last_N = N;
 	init_rdft( N, bitshuffle, trigland);
 	
-	
+
 	
 	for(i = 0, j = 0; i < impulse->b_frames; i+= impulse->b_nchans, j++){
 		filt[j] = impulse->b_samples[i + impulse_chan];
 	}
-	
+		
 	rdft( N, 1, filt, bitshuffle, trigland );
 
 	for (i=0; i <= N; i += 2){
@@ -301,7 +302,9 @@ void convolver_convolvechans(t_convolver *x, t_symbol *msg, short argc, t_atom *
 		filt[i] *= max;
 	
 	ifr_cnt = ofr_cnt = 0;
-	
+
+
+    
 	if(source->b_frames - ifr_cnt >= N2)
 		readframes = N2;
 	else readframes = source->b_frames - ifr_cnt;
@@ -318,13 +321,17 @@ void convolver_convolvechans(t_convolver *x, t_symbol *msg, short argc, t_atom *
 	}
 	//post("src frames + imp frames %d dest frames %d",source->b_frames + impulse->b_frames, dest->b_frames);
 
+
+    
 	if( dest->b_frames < target_frames){
+        buffer_unlocksamples(dest->b);
 		atom_setfloat(&newsize, (float) target_frames);
 		typedmess((void *) x->dest->b, gensym("sizeinsamps"),1, &newsize);
 		post("%s: destination buffer was too small and has been resized",OBJECT_NAME);
 		convolver_attach_buffers( x );
+        dest->b_samples = buffer_locksamples(dest->b);
 	}
-	
+// 	    return;
 	while(copacetic && ofr_cnt < ifr_cnt + N2){
 		// post("ofr %d ifr %d, N %d",ofr_cnt, ifr_cnt, N);
 		
@@ -558,7 +565,7 @@ void *convolver_new(t_symbol *msg, short argc, t_atom *argv)
 	atom_arg_getsym(&x->source->myname,0,argc,argv);
 	atom_arg_getsym(&x->impulse->myname,1,argc,argv);
 	atom_arg_getsym(&x->dest->myname,2,argc,argv);
-	
+	convolver_attach_buffers(x); // try
 	x->sr = sys_getsr();
     return (x);
 }
@@ -588,7 +595,11 @@ void convolver_setbuf(t_convolver *x, t_buffy *trybuf)
         trybuf->b_nchans = buffer_getchannelcount(b);
         trybuf->b_valid = 1;
         trybuf->b = b;
+       // post("successfully attached %s", trybuf->myname->s_name);
+    } else {
+      //  post("could not attach %s", trybuf->myname->s_name);
     }
+    
 }
 
 void convolver_dsp_free(t_convolver *x)
