@@ -129,7 +129,9 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
                                  long flags, void *userparam);
 void chopper_attach_buffer(t_chopper *x);
 void chopper_dsp64(t_chopper *x, t_object *dsp64, short *count, double sr, long n, long flags);
-
+t_max_err chopper_notify(t_chopper *x, t_symbol *s, t_symbol *msg, void *sender, void *data);
+void chopper_doset(t_chopper *x, t_symbol *s);
+void chopper_set(t_chopper *x, t_symbol *s);
 t_symbol *ps_buffer;
 
 
@@ -524,6 +526,7 @@ void *chopper_new(t_symbol *msg, short argc, t_atom *argv)
 	x->taper_duration = 20.0;
 	atom_arg_getlong(&tint,1,argc,argv);
 	x->outlet_count = tint;
+    post("testing new chopper\n");
 	//	post("chopper chan count is %d or %d", x->outlet_count, tint);
 	atom_arg_getfloat(&x->taper_duration,2,argc,argv);
 
@@ -597,7 +600,7 @@ void chopper_init(t_chopper *x, short initialized)
 		x->stored_starts = calloc(MAXSTORE, sizeof(int));
 		x->stored_samps = calloc(MAXSTORE, sizeof(int));
 		x->stored_increments = calloc(MAXSTORE, sizeof(int));
-		
+		chopper_set(x, x->wavename);
 		
 	} else {
 		x->taper_samps = x->R * x->taper_duration;
@@ -656,6 +659,8 @@ void chopper_rdurme(t_chopper *x)
 	x->transp_loop_samps = new_dur;
 	// chopper_show_loop(x);
 }
+
+
 
 void chopper_rincme(t_chopper *x )
 {
@@ -811,20 +816,28 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 	t_buffer_obj *the_buffer;
     
 	// quick bail on bad buffer!
-    chopper_attach_buffer(x);
+ //   chopper_attach_buffer(x);
     the_buffer = buffer_ref_getobject(x->buffer_ref);
     if ( the_buffer == NULL){
         if(!x->already_failed){
             x->already_failed = 1;
             object_post((t_object *)x, "\"%s\" is an invalid buffer", x->wavename->s_name);
         }
-        return;
+        goto zero;
     }
 	tab = buffer_locksamples(the_buffer);
 	if (!tab){
-		return;
+        goto zero;
     }
     frames = buffer_getframecount(the_buffer);
+   // post("framecount %d\n", frames);
+    if( frames <= 0){
+        if(!x->already_failed){
+            x->already_failed = 1;
+            object_post((t_object *)x, "\"%s\" is an empty buffer", x->wavename->s_name);
+        }
+        goto zero;
+    }
     nc = buffer_getchannelcount(the_buffer);
     // now OWN the buffer, freeing it at the end of this job
 
@@ -883,7 +896,9 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 	/* SET INITIAL SEGMENT */
 	
 	bindex = fbindex = x->fbindex;
-	
+
+
+    
 	
 	for(k = 0; k < n; k++) {
 		if(lock_loop)  {
@@ -904,6 +919,9 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 					if( x->dropout_state ) {
 						outs[i][k] = 0.0;
 					} else {
+                        if( bindex < 0 || bindex >= frames - 1){
+                            bindex = 0;
+                        }
 						if(bindex < frames - 1){
 							tmp1 = tab[bindex * nc + i];
 							tmp2 = tab[(bindex + 1) * nc + i] ;
@@ -936,6 +954,9 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 						if( x->dropout_state ) {
 							outs[i][k] = 0.0;
 						} else {
+                            if( bindex < 0 || bindex >= frames - 1){
+                                bindex = 0;
+                            }
 							if(bindex < frames - 1){
 								tmp1 = tab[bindex * nc + i];
 								tmp2 = tab[(bindex + 1) * nc + i] ;
@@ -988,6 +1009,9 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 							outs[i][k] = 0.0;
 						}
 						else {
+                            if( bindex < 0 || bindex >= frames - 1){
+                                bindex = 0;
+                            }
 							if(bindex < frames - 1){
 								tmp1 = tab[bindex * nc + i];
 								tmp2 = tab[(bindex + 1) * nc + i] ;
@@ -1061,6 +1085,9 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 					if( x->dropout_state ) {
 						outs[i][k] = 0.0;
 					} else {
+                        if( bindex < 0 || bindex >= frames - 1){
+                            bindex = 0;
+                        }
 						if(bindex < frames - 1){
 							tmp1 = tab[bindex * nc + i];
 							tmp2 = tab[(bindex + 1) * nc + i] ;
@@ -1104,6 +1131,9 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 				if( x->dropout_state ) {
 					outs[i][k] = 0.0;
 				} else {
+                    if( bindex < 0 || bindex >= frames - 1){
+                        bindex = 0;
+                    }
 					if(bindex < frames - 1){
 						tmp1 = tab[bindex * nc + i];
 						tmp2 = tab[(bindex + 1) * nc + i] ;
@@ -1155,7 +1185,13 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 					if( x->dropout_state ) {
 						outs[i][k] = 0.0;
 					} else {
+                        if( bindex < 0 || bindex >= frames - 1){
+                            bindex = 0;
+                        }
 						if(bindex < frames - 1){
+                            if(bindex < 0 || bindex > frames - 1){
+                                bindex = 0;
+                            }
 							tmp1 = tab[bindex * nc + i];
 							tmp2 = tab[(bindex + 1) * nc + i] ;
 							sample = (tmp1 + frac * (tmp2-tmp1)) * preempt_gain;
@@ -1217,6 +1253,13 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 	x->increment = increment;
     // release the buffer
     buffer_unlocksamples(the_buffer);
+    return;
+zero:
+    for(k = 0; k < n; k++) {
+        for(i = 0; i < numouts; i++){
+            outs[i][k] = 0.0;
+        }
+    }
 }
 
 
@@ -1346,6 +1389,10 @@ void chopper_attach_buffer(t_chopper *x)
 		buffer_ref_set(x->buffer_ref, x->wavename);
 }
 
+t_max_err chopper_notify(t_chopper *x, t_symbol *s, t_symbol *msg, void *sender, void *data)
+{
+    return buffer_ref_notify(x->buffer_ref, s, msg, sender, data);
+}
 
 void chopper_dsp64(t_chopper *x, t_object *dsp64, short *count, double sr, long n, long flags)
 {
@@ -1358,6 +1405,22 @@ void chopper_dsp64(t_chopper *x, t_object *dsp64, short *count, double sr, long 
     object_method(dsp64, gensym("dsp_add64"),x,chopper_perform_universal64,0,NULL);
 }
 
+
+
+
+// here's where we set the buffer~ we're going to access
+void chopper_doset(t_chopper *x, t_symbol *s)
+{
+    if (!x->buffer_ref)
+        x->buffer_ref = buffer_ref_new((t_object *)x, s);
+    else
+        buffer_ref_set(x->buffer_ref, s);
+}
+
+void chopper_set(t_chopper *x, t_symbol *s)
+{
+    defer(x, (method)chopper_doset, s, 0, NULL);
+}
 
 
 #define LONG_RAND_MAX 2147483648.0
