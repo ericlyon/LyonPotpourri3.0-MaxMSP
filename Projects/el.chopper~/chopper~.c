@@ -891,6 +891,10 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 			if (recalling_loop) {
 				
 				bindex = floor((double)fbindex);
+                /* protect index */
+                if(bindex < 0 || bindex >= frames - 1){
+                    bindex = fbindex = loop_start;
+                }
 				frac = fbindex - bindex ;
 				fbindex += increment;
 				--preempt_count;
@@ -918,7 +922,7 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 			}
 			
 			else if(force_new_loop){
-				if( bindex < 0 || bindex >= frames ){
+				if( bindex < 0 || bindex > frames - 1 ){
 					fbindex = bindex = frames / 2;
 				}
 				if( preempt && preempt_samps > x->samps_to_go ){ /* PREEMPT FADE */
@@ -1009,7 +1013,7 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 			/* REGULAR PLAYBACK */
 			else {
 				
-				if( bindex < 0 || bindex >= frames ){
+				if( bindex < 0 || bindex > frames - 1){
 					// error("lock_loop: bindex %d is out of range", bindex);
 					chopper_randloop(x);
 					bindex = fbindex = x->fbindex;
@@ -1092,7 +1096,10 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 			bindex = fbindex;
 			frac = fbindex - bindex;
 			fbindex += increment;
-			
+            
+            if(fbindex < 0 || fbindex >= frames - 1){
+                bindex = fbindex = loop_start;
+            }
 			for(i = 0; i < active_outlets; i++){
 				if( x->dropout_state ) {
 					outs[i][k] = 0.0;
@@ -1128,7 +1135,7 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 				/* default level */
 				fade_level = 1.0;
 				
-				if( bindex < 0 || bindex >= frames ){
+				if( bindex < 0 || bindex > frames - 1){
 					chopper_randloop(x);
 					bindex = fbindex = x->fbindex;
 					samps_to_go = x->samps_to_go;
@@ -1141,7 +1148,9 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 				bindex = fbindex;
 				frac = fbindex - bindex;
 				fbindex += increment;
-				
+                if(fbindex < 0 || fbindex > frames - 1){
+                    bindex = fbindex = loop_start;
+                }
 				for(i = 0; i < active_outlets; i++){
 					if( x->dropout_state ) {
 						outs[i][k] = 0.0;
