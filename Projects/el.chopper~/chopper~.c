@@ -526,7 +526,7 @@ void *chopper_new(t_symbol *msg, short argc, t_atom *argv)
 	x->taper_duration = 20.0;
 	atom_arg_getlong(&tint,1,argc,argv);
 	x->outlet_count = tint;
-    post("testing new chopper\n");
+    // post("testing new chopper\n");
 	//	post("chopper chan count is %d or %d", x->outlet_count, tint);
 	atom_arg_getfloat(&x->taper_duration,2,argc,argv);
 

@@ -94,7 +94,7 @@
 		089C1669FE841209C02AAC07 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0500;
+				LastUpgradeCheck = 0730;
 			};
 			buildConfigurationList = 2FBBEACF08F335010078DB84 /* Build configuration list for PBXProject "el.counter~" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -148,7 +148,9 @@
 		2FBBEAD008F335010078DB84 /* Development */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ENABLE_TESTABILITY = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.7;
+				ONLY_ACTIVE_ARCH = YES;
 			};
 			name = Development;
 		};
@@ -172,6 +174,7 @@
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
 				OTHER_LDFLAGS = "$(C74_SYM_LINKER_FLAGS)";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.cycling74.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = "el.counter~";
 				SDKROOT = macosx;
 			};
@@ -189,6 +192,7 @@
 				);
 				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
 				OTHER_LDFLAGS = "$(C74_SYM_LINKER_FLAGS)";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.cycling74.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = "el.counter~";
 				SDKROOT = macosx;
 			};
