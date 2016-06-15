@@ -520,6 +520,10 @@ void *chopper_new(t_symbol *msg, short argc, t_atom *argv)
 	
 	x->outlet_count = 1;
 	x->already_failed = 0;
+    if(argc < 1){
+        error("el.chopper~: must provide buffer name");
+        return NULL;
+    }
 	atom_arg_getsym(&x->wavename,0,argc,argv);
 	//	post("chopper wave is %s", x->wavename);
 	tint = 1;
