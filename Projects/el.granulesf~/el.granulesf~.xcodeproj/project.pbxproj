@@ -10,7 +10,8 @@
 		078E0FA2175D650800F6236C /* granulesf~.c in Sources */ = {isa = PBXBuildFile; fileRef = 078E0FA1175D650800F6236C /* granulesf~.c */; };
 		07F99BC1173142E8005AE3BB /* MSPd.h in Headers */ = {isa = PBXBuildFile; fileRef = 07F99BC0173142E8005AE3BB /* MSPd.h */; };
 		22922AD30F38D67900B1EFEA /* commonsyms.c in Sources */ = {isa = PBXBuildFile; fileRef = 22922AD20F38D67900B1EFEA /* commonsyms.c */; };
-		22CF116E0EE9A7700054F513 /* MaxAudioAPI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22CF116D0EE9A7700054F513 /* MaxAudioAPI.framework */; };
+		6C6A02011F60388C0035980A /* MaxAudioAPI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6C6A02001F60388C0035980A /* MaxAudioAPI.framework */; };
+		6C6A02031F6038C70035980A /* MaxAudio.lib in Frameworks */ = {isa = PBXBuildFile; fileRef = 6C6A02021F6038C70035980A /* MaxAudio.lib */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -18,8 +19,9 @@
 		07F99BC0173142E8005AE3BB /* MSPd.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = MSPd.h; path = ../../MSPd.h; sourceTree = "<group>"; };
 		22922AD20F38D67900B1EFEA /* commonsyms.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = commonsyms.c; path = "../../../c74support/max-includes/common/commonsyms.c"; sourceTree = SOURCE_ROOT; };
 		22CF10220EE984600054F513 /* maxmspsdk.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = maxmspsdk.xcconfig; path = ../../maxmspsdk.xcconfig; sourceTree = SOURCE_ROOT; };
-		22CF116D0EE9A7700054F513 /* MaxAudioAPI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MaxAudioAPI.framework; path = "../../../c74support/msp-includes/MaxAudioAPI.framework"; sourceTree = SOURCE_ROOT; };
 		2FBBEAE508F335360078DB84 /* el.granulesf~.mxo */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "el.granulesf~.mxo"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6C6A02001F60388C0035980A /* MaxAudioAPI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MaxAudioAPI.framework; path = "../../../c74support/msp-includes/MaxAudioAPI.framework"; sourceTree = "<group>"; };
+		6C6A02021F6038C70035980A /* MaxAudio.lib */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = MaxAudio.lib; path = "../../../c74support/msp-includes/MaxAudio.lib"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -27,7 +29,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				22CF116E0EE9A7700054F513 /* MaxAudioAPI.framework in Frameworks */,
+				6C6A02011F60388C0035980A /* MaxAudioAPI.framework in Frameworks */,
+				6C6A02031F6038C70035980A /* MaxAudio.lib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -41,7 +44,8 @@
 				22922AD20F38D67900B1EFEA /* commonsyms.c */,
 				07F99BC0173142E8005AE3BB /* MSPd.h */,
 				078E0FA1175D650800F6236C /* granulesf~.c */,
-				22CF116D0EE9A7700054F513 /* MaxAudioAPI.framework */,
+				6C6A02021F6038C70035980A /* MaxAudio.lib */,
+				6C6A02001F60388C0035980A /* MaxAudioAPI.framework */,
 				19C28FB4FE9D528D11CA2CBB /* Products */,
 			);
 			name = iterator;
@@ -149,6 +153,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				MACOSX_DEPLOYMENT_TARGET = 10.6;
+				SDKROOT = macosx;
 			};
 			name = Development;
 		};
@@ -156,6 +161,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				MACOSX_DEPLOYMENT_TARGET = 10.6;
+				SDKROOT = macosx;
 			};
 			name = Deployment;
 		};
@@ -202,7 +208,7 @@
 				2FBBEAD108F335010078DB84 /* Deployment */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Development;
+			defaultConfigurationName = Deployment;
 		};
 		2FBBEAE008F335360078DB84 /* Build configuration list for PBXNativeTarget "max-external" */ = {
 			isa = XCConfigurationList;
@@ -211,7 +217,7 @@
 				2FBBEAE208F335360078DB84 /* Deployment */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Development;
+			defaultConfigurationName = Deployment;
 		};
 /* End XCConfigurationList section */
 	};
