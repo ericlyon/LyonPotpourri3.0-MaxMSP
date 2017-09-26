@@ -94,7 +94,7 @@
 		089C1669FE841209C02AAC07 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0500;
+				LastUpgradeCheck = 0730;
 			};
 			buildConfigurationList = 2FBBEACF08F335010078DB84 /* Build configuration list for PBXProject "el.squash~" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -148,7 +148,9 @@
 		2FBBEAD008F335010078DB84 /* Development */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ENABLE_TESTABILITY = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.7;
+				ONLY_ACTIVE_ARCH = YES;
 			};
 			name = Development;
 		};

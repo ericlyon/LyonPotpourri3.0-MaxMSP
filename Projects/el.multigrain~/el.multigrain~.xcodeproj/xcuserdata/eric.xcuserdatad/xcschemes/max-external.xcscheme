@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2FBBEAD608F335360078DB84"
-               BuildableName = "el.adsr~.mxo"
+               BuildableName = "el.multigrain~.mxo"
                BlueprintName = "max-external"
                ReferencedContainer = "container:el.multigrain~.xcodeproj">
             </BuildableReference>
@@ -46,7 +46,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2FBBEAD608F335360078DB84"
-            BuildableName = "el.adsr~.mxo"
+            BuildableName = "el.multigrain~.mxo"
             BlueprintName = "max-external"
             ReferencedContainer = "container:el.multigrain~.xcodeproj">
          </BuildableReference>

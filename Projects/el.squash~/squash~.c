@@ -1,5 +1,4 @@
 #include "MSPd.h"
-//#include "fftease_oldskool.h"
 
 #define OBJECT_NAME "squash~"
 
@@ -63,13 +62,14 @@ int C74_EXPORT main(void)
 	t_class *c;
 	c = class_new("el.squash~", (method)squash_new, (method)dsp_free, sizeof(t_squash), 0,A_GIMME, 0);
 	
-    class_addmethod(c, (method)squash_dsp64, "dsp64", A_CANT, 0);
-	class_addmethod(c, (method)squash_assist,"assist",A_CANT,0);
+    class_addmethod(c,(method)squash_dsp64, "dsp64", A_CANT, 0);
+	class_addmethod(c,(method)squash_assist,"assist",A_CANT,0);
 	class_addmethod(c,(method)squash_thresh, "thresh", A_FLOAT,  0);
 	class_addmethod(c,(method)squash_nt, "nt", A_FLOAT,  0);
 	class_addmethod(c,(method)squash_nmult, "nmult", A_FLOAT,  0);
 	class_addmethod(c,(method)squash_ratio, "ratio", A_FLOAT,  0);
 	class_addmethod(c,(method)squash_mute, "mute", A_FLOAT,  0);
+    class_dspinit(c);
 	class_register(CLASS_BOX, c);
 	squash_class = c;
 	
@@ -285,12 +285,12 @@ void *squash_new(t_symbol *msg, short argc, t_atom *argv)
 	x->Nw = x->N;
 	x->N2 = x->N / 2;
 	x->incnt = - x->Nw;
-	x->Wanal = (float *) calloc(x->Nw,sizeof(float));	
-	x->Wsyn = (float *) calloc(x->Nw, sizeof(float));	
-	x->Hwin = (float *) calloc(x->Nw, sizeof(float));
-	x->input = (float *) calloc(x->Nw, sizeof(float));
-	x->output = (float *) calloc(x->Nw, sizeof(float));
-	x->buffer = (float *) calloc(x->N, sizeof(float));
+	x->Wanal = (float *) sysmem_newptrclear(x->Nw * sizeof(float));
+	x->Wsyn = (float *) sysmem_newptrclear(x->Nw * sizeof(float));
+	x->Hwin = (float *) sysmem_newptrclear(x->Nw * sizeof(float));
+    x->input = (float *) sysmem_newptrclear(x->Nw * sizeof(float));
+	x->output = (float *) sysmem_newptrclear(x->Nw * sizeof(float));
+	x->buffer = (float *) sysmem_newptrclear(x->N * sizeof(float));
 	makehanning(x->Hwin, x->Wanal, x->Wsyn, x->Nw, x->N, x->D, 0);
 	x->thresh = 0.1;
 	x->ratio = 1.;
@@ -352,6 +352,7 @@ void squash_perform64(t_squash *x, t_object *dsp64, double **ins,
 	x->incnt = x->incnt % Nw;
 
 }
+/*
 
 t_int *squash_perform(t_int *w)
 {
@@ -403,10 +404,17 @@ t_int *squash_perform(t_int *w)
 	x->incnt = x->incnt % Nw;
 	return w + 5;
 }
+*/
 
 void squash_dsp_free(t_squash *x)
 {
 	dsp_free((t_pxobject *)x);
+    sysmem_freeptr(x->Wanal);
+    sysmem_freeptr(x->Wsyn);
+    sysmem_freeptr(x->Hwin);
+    sysmem_freeptr(x->input);
+    sysmem_freeptr(x->output);
+    sysmem_freeptr(x->buffer);
 }
 
 void squash_dsp64(t_squash *x, t_object *dsp64, short *count, double sr, long n, long flags)

@@ -9,14 +9,12 @@
 /* Begin PBXBuildFile section */
 		07570FE8186B581E003BB279 /* MSPd.h in Headers */ = {isa = PBXBuildFile; fileRef = 07570FE7186B581E003BB279 /* MSPd.h */; };
 		07A111AA1F6577CB00F451A9 /* multigrain~.c in Sources */ = {isa = PBXBuildFile; fileRef = 07A111A91F6577CB00F451A9 /* multigrain~.c */; };
-		22922AD30F38D67900B1EFEA /* commonsyms.c in Sources */ = {isa = PBXBuildFile; fileRef = 22922AD20F38D67900B1EFEA /* commonsyms.c */; };
 		22CF116E0EE9A7700054F513 /* MaxAudioAPI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22CF116D0EE9A7700054F513 /* MaxAudioAPI.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		07570FE7186B581E003BB279 /* MSPd.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = MSPd.h; path = ../../MSPd.h; sourceTree = "<group>"; };
 		07A111A91F6577CB00F451A9 /* multigrain~.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "multigrain~.c"; sourceTree = "<group>"; };
-		22922AD20F38D67900B1EFEA /* commonsyms.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = commonsyms.c; path = "../../../c74support/max-includes/common/commonsyms.c"; sourceTree = SOURCE_ROOT; };
 		22CF10220EE984600054F513 /* maxmspsdk.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = maxmspsdk.xcconfig; path = ../../maxmspsdk.xcconfig; sourceTree = SOURCE_ROOT; };
 		22CF116D0EE9A7700054F513 /* MaxAudioAPI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MaxAudioAPI.framework; path = "../../../c74support/msp-includes/MaxAudioAPI.framework"; sourceTree = SOURCE_ROOT; };
 		2FBBEAE508F335360078DB84 /* el.multigrain~.mxo */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "el.multigrain~.mxo"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -38,7 +36,6 @@
 			isa = PBXGroup;
 			children = (
 				22CF10220EE984600054F513 /* maxmspsdk.xcconfig */,
-				22922AD20F38D67900B1EFEA /* commonsyms.c */,
 				07A111A91F6577CB00F451A9 /* multigrain~.c */,
 				07570FE7186B581E003BB279 /* MSPd.h */,
 				22CF116D0EE9A7700054F513 /* MaxAudioAPI.framework */,
@@ -138,7 +135,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				07A111AA1F6577CB00F451A9 /* multigrain~.c in Sources */,
-				22922AD30F38D67900B1EFEA /* commonsyms.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -165,6 +161,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 22CF10220EE984600054F513 /* maxmspsdk.xcconfig */;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_32_64_BIT)";
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -181,6 +178,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 22CF10220EE984600054F513 /* maxmspsdk.xcconfig */;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_32_64_BIT)";
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = YES;
 				FRAMEWORK_SEARCH_PATHS = (
