@@ -88,6 +88,7 @@ void player_dsp64(t_player *x, t_object *dsp64, short *count, double sr, long n,
 void player_perform64(t_player *x, t_object *dsp64, double **ins,
                       long numins, double **outs,long numouts, long n,
                       long flags, void *userparam);
+t_max_err player_notify(t_player *x, t_symbol *s, t_symbol *msg, void *sender, void *data);
 int player_attach_buffer(t_player*x);
 
 int C74_EXPORT main(void)
@@ -116,6 +117,10 @@ int C74_EXPORT main(void)
 	
 }
 
+t_max_err player_notify(t_player *x, t_symbol *s, t_symbol *msg, void *sender, void *data)
+{
+    return buffer_ref_notify(x->wavebuf, s, msg, sender, data);
+}
 
 void player_stop(t_player *x)
 {
@@ -241,7 +246,7 @@ void player_dblclick(t_player *x)
 void attach_buffer(t_player *x, t_symbol *wavename)
 {
 	
-	t_buffer_obj *b;
+//	t_buffer_obj *b;
 	
 	x->hosed = 0;
 	if (!x->wavebuf)
@@ -250,7 +255,7 @@ void attach_buffer(t_player *x, t_symbol *wavename)
 		buffer_ref_set(x->wavebuf, x->wavename);
     
 	// buffer_ref_set(x->wavebuf, wavename);
-    
+    /*
     b = buffer_ref_getobject(x->wavebuf);
     if(b == NULL){
         post("invalid sound buffer %s", wavename->s_name);
@@ -265,6 +270,7 @@ void attach_buffer(t_player *x, t_symbol *wavename)
              buffer_getchannelcount(b), x->outlet_count);
 		x->hosed = 1;
 	}
+    */
 }
 
 
@@ -338,7 +344,7 @@ void player_perform64(t_player *x, t_object *dsp64, double **ins,
         if(!x->already_failed){
             post("ocount %d bchns %d", x->outlet_count, b_nchans);
             x->already_failed = 1;
-            object_post((t_object *)x, "channel mismatch between buffer \"%s\" which has %d channels and the chopper~ which requires %d channels",
+            object_post((t_object *)x, "channel mismatch between buffer \"%s\" which has %d channels and the player~ which requires %d channels",
                 x->wavename->s_name, b_nchans, numouts);
         }
         return;
