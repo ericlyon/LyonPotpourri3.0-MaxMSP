@@ -590,12 +590,13 @@ void player_dsp_free(t_player *x)
 
 void player_dsp64(t_player *x, t_object *dsp64, short *count, double sr, long n, long flags)
 {
+    /*
     //   post("64 bit version of player~");
     if(!sr)
         return;
     
-    player_stop(x);
-	attach_buffer(x, x->wavename);
+    // player_stop(x);
+	// attach_buffer(x, x->wavename);
 	
 	if(x->sr != sr){
 		x->sr = sr;
@@ -603,7 +604,7 @@ void player_dsp64(t_player *x, t_object *dsp64, short *count, double sr, long n,
 	
 	if(x->vs != n){
 		x->vs = n;
-		player_init(x,1);
+		// player_init(x,1);
 	}
     
 	if(! x->hosed) {
@@ -617,7 +618,7 @@ void player_dsp64(t_player *x, t_object *dsp64, short *count, double sr, long n,
 	}
 	
 //	player_stop(x); // turn off all players to start
-    
+ */
     object_method(dsp64, gensym("dsp_add64"),x,player_perform64,0,NULL);
 }
 
