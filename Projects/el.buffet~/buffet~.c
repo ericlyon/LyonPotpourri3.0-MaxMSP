@@ -2,10 +2,8 @@
 // #include "fftease.h"
 
 #define DENORM_WANT_FIX		1
-
 #define CUSHION_FRAMES (128) // pad for grabbing
-#define MAX_CHANNELS (2)
-
+#define MAX_CHANNELS (1024)
 #define MAX_RMS_BUFFER (0.250)
 #define MIN_RMS_BUFFER (.001)
 #define MAX_EVENTS (1024)
@@ -15,15 +13,13 @@
 
 static t_class *buffet_class;
 
-
-
 typedef struct _buffet
 {
     t_pxobject x_obj;
     t_symbol *wavename; // name of waveform buffer
     t_buffer_ref *src_buffer_ref; // MSP reference to the buffer
-    t_buffer_ref *dest_buffer_ref; // MSP reference to source buffer
-    
+    t_buffer_ref *dest_buffer_ref; // MSP reference to dest buffer for copying
+    t_buffer_ref *cat_buffer_ref; // MSP reference to buffer to concatenate
     float sr; // sampling rate
     short hosed; // buffers are bad
     float minframes; // minimum replacement block in sample frames
@@ -78,8 +74,8 @@ void buffet_dc_coef(t_buffet *x, double f);
 void buffet_normalize(t_buffet *x, double f);
 void buffet_rotatetozero(t_buffet *x, double f);
 void buffet_erase(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
-//void buffet_events(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
-//void buffet_pevents(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
+void buffet_events(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
+void buffet_pevents(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
 void buffet_detect_onsets(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
 void buffet_detect_subband_onsets(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
 void buffet_copy_to_buffer(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
@@ -92,12 +88,15 @@ void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
 void buffet_resize(t_buffet *x, t_floatarg newsize);
 void buffet_normalize_selection(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
 void buffet_copy_to_mono_buffer(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
-// void buffet_catbuf(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
+void buffet_catbuf(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
 void buffet_trimzero(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
 void buffet_update(t_buffet *x);
 void buffet_spritz(t_buffet *x,  t_symbol *msg, short argc, t_atom *argv);
 //void buffet_attach_any_buffer(t_buffet *x, t_buffer_ref *ref, t_symbol *wavename);
 //void buffet_attach_buffer(t_buffet *x);
+t_max_err buffet_notify(t_buffet *x, t_symbol *s, t_symbol *msg, void *sender, void *data);
+void buffet_dsp64(t_buffet *x, t_object *dsp64, short *count, double samplerate, long maxvectorsize, long flags);
+void buffet_perform64(t_buffet *x, t_object *dsp64, double **ins, long numins, double **outs, long numouts, long sampleframes, long flags, void *userparam);
 
 int C74_EXPORT main(void)
 {
@@ -130,10 +129,14 @@ int C74_EXPORT main(void)
 	class_addmethod(c,(method)buffet_fixdenorm,"fixdenorm",  0);
 	class_addmethod(c,(method)buffet_trimzero,"trimzero", A_GIMME, 0);
 	class_addmethod(c,(method)buffet_overdub,"overdub", A_GIMME, 0);
-//	class_addmethod(c,(method)buffet_catbuf,"catbuf", A_GIMME, 0);
+    class_addmethod(c,(method)buffet_events,"events", A_GIMME, 0);
+    class_addmethod(c,(method)buffet_pevents,"pevents", A_GIMME, 0);
+	class_addmethod(c,(method)buffet_catbuf,"catbuf", A_GIMME, 0);
     class_addmethod(c,(method)buffet_info,"info", 0);
 	class_addmethod(c,(method)buffet_resize,"resize", A_FLOAT, 0);
 	class_addmethod(c,(method)buffet_spritz,"spritz", A_GIMME, 0);
+    class_addmethod(c,(method)buffet_notify,"notify", A_CANT, 0);
+    class_addmethod(c,(method)buffet_dsp64,"dsp64", A_CANT, 0);
 	class_addmethod(c,(method)buffet_normalize_selection,"normalize_selection", A_GIMME, 0);
 	class_dspinit(c);
 	class_register(CLASS_BOX, c);
@@ -176,7 +179,11 @@ void buffet_spritz(t_buffet *x,  t_symbol *msg, short argc, t_atom *argv)
 	}
     //	buffet_erase(x,msg,argc,argv);
 	//	post("spritz: channels %d frames %d",b_nchans, b_frames);
-	memset((char *)b_samples, 0, b_nchans * b_frames * sizeof(float));
+	// memset((char *)b_samples, 0, b_nchans * b_frames * sizeof(float));
+    
+    for(i = 0; i < b_nchans * b_frames; i++){
+        b_samples[i] = 0.0;
+    }
 	// do not repeating insert (NOT DONE YET!!!)
 	for( j = 0; j < b_nchans; j++){
 		for(i = 0; i < b_frames; i++){
@@ -274,7 +281,7 @@ escape2: ;
 	skipmem = frontframe * sizeof(float) * b_nchans;
 	totalmem = b_frames * b_nchans * sizeof(float);
 	
-	storage = (float *) malloc( newsize );
+	storage = (float *) sysmem_newptr( newsize );
 	if(storage == NULL){
 		post("could not get memory");
 		goto out;
@@ -304,65 +311,16 @@ escape2: ;
     typedmess((void *)the_buffer, gensym("sizeinsamps"), argcc, &argvv);
 
     b_samples = buffer_locksamples(the_buffer);
-	memcpy(b_samples, storage, newsize);
-    
-	free(storage);
+	// memcpy(b_samples, storage, newsize); // dest, src, size
+    //sysmem_copyptr(<#const void *src#>, <#void *dst#>, <#long bytes#>);
+    sysmem_copyptr(storage, b_samples, newsize);
+	sysmem_freeptr(storage);
 	out :
     
     buffer_unlocksamples(the_buffer);
 	buffet_update(x);
 }
-/*
-void buffet_catbuf(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
-{
-//	t_buffy *dubsource = x->dubsource;
-//	t_buffy *thisbuf = x->thisbuf;
-//	t_buffer *b;
-    t_symbol *dubsource;
-	short argcc = 1;
-	t_atom argvv;
-	//	long safety = 1000; // extra frames
-	long sizethis, sizecat, newsize, oldframes;
-	float *storage; // copy current contents here before resizing
-	// int i;
-	atom_arg_getsym(&dubsource,0,argc,argv);
-	thisbuf->myname = x->wavename; // current name of this buffer
 
-	if( dubsource->b_nchans != thisbuf->b_nchans ){
-		error("%s: channel mismatch between %s (%d chans) and %s (%d chans)",
-			  thisbuf->myname->s_name, thisbuf->b_nchans, dubsource->myname->s_name, dubsource->b_nchans);
-		return;
-	}
-	sizethis = sizeof(float) * thisbuf->b_nchans * thisbuf->b_frames;
-	sizecat = sizeof(float) * dubsource->b_nchans * dubsource->b_frames;
-	// post("memthis: %d memcat: %d",sizethis, sizecat);
-	storage = (float *) malloc( sizethis );
-	newsize = (thisbuf->b_frames + dubsource->b_frames); // new frame size
-	memcpy(storage, thisbuf->b_samples, sizethis); // store current contents
-	
-	oldframes = thisbuf->b_frames;
-	SETFLOAT(&argvv,newsize);
-	if ((b = (t_buffer *)(thisbuf->myname->s_thing)) && ob_sym(b) == gensym("buffer~")) {
-		if( ! b->b_valid ){
-			post("not valid");
-		} else {
-			typedmess((void *)b, gensym("sizeinsamps"), argcc, &argvv);
-		}
-	} else {
-		post("not a buffer");
-	}
-	setbuffy(dubsource);
-	setbuffy(thisbuf);
-	memcpy(thisbuf->b_samples, storage, sizethis);
-
-	
-	memcpy(thisbuf->b_samples + (oldframes * thisbuf->b_nchans), dubsource->b_samples,
-		   dubsource->b_frames * dubsource->b_nchans * sizeof(float));
-	
-	free(storage);
-	buffet_update(x);
-}
-*/
 
 void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 {
@@ -413,7 +371,15 @@ void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
     srcref = buffer_ref_new((t_object*)x, x->wavename);
     dubbuf = buffer_ref_getobject(dubref);
     srcbuf = buffer_ref_getobject(srcref);
-    
+  
+    if(dubbuf == NULL){
+        post("buffer %s is null", dubname->s_name);
+        return;
+    }
+    if(srcbuf == NULL){
+        post("buffer %s is null", x->wavename->s_name);
+        return;
+    }
 	// attach buffers
 //	setbuffy(dubsource);
 //	setbuffy(thisbuf);
@@ -476,11 +442,9 @@ void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
     
     buffer_unlocksamples(srcbuf);
     buffer_unlocksamples(dubbuf);
-    object_free(dubbuf);
-    object_free(srcbuf);
     buffet_update(x);
 	// send bang that overdub has completed
-    //	buffet_update(x);
+    buffet_update(x);
 	
 }
 
@@ -509,12 +473,13 @@ void buffet_overlap(t_buffet *x, double f)
 	}
 	x->fade = f * .001 * x->sr;
 }
-/*
+
 void buffet_events(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 {
 	float *b_samples;
 	long b_nchans;
 	long b_frames;
+    t_buffer_obj *wavebuf_b;
 	t_atom *listdata = x->listdata;
 	
 	float bufsize;
@@ -533,12 +498,29 @@ void buffet_events(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 	float realtime = 0.0;
 	int event_count = 0;
 	float buffer_duration;
+
 	
-	buffet_setbuf(x, x->wavename);
-	b_samples = x->wavebuf->b_samples;
-	b_nchans = x->wavebuf->b_nchans;
-	b_frames = x->wavebuf->b_frames;
-	
+    if(!x->src_buffer_ref){
+        x->src_buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
+    } else{
+        buffer_ref_set(x->src_buffer_ref, x->wavename);
+    }
+    
+    wavebuf_b = buffer_ref_getobject(x->src_buffer_ref);
+    if(wavebuf_b == NULL){
+        post("buffer %s is null", x->wavename->s_name);
+        return;
+    }
+    b_nchans = buffer_getchannelcount(wavebuf_b);
+    b_frames= buffer_getframecount(wavebuf_b);
+    b_samples = buffer_locksamples(wavebuf_b);
+    if(! b_samples ){
+        post("invalid samples");
+        goto exit;
+    }
+    
+    
+    
 	// duration in ms.
 	buffer_duration = 1000.0 * (float)b_frames / x->sr;
 	
@@ -584,31 +566,34 @@ void buffet_events(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 				error("%s: exceeded maximum of %d events",OBJECT_NAME, MAX_EVENTS);
 				break;
 			}
-			SETFLOAT(listdata+(event_count*2), realtime * 1000.0);
+			// SETFLOAT(listdata+(event_count*2), realtime * 1000.0);
+            atom_setfloat(listdata+(event_count*2), realtime * 1000.0);
 			
 		}
 		else if( rmsval < offthresh && activated ){
 			activated = 0;
 			//			post("event %d ends at %f",event_count, realtime);
-			SETFLOAT(listdata+((event_count*2) + 1), realtime * 1000.0);
+			atom_setfloat(listdata+((event_count*2) + 1), realtime * 1000.0);
 			++event_count;
 		}
 	}
 	if(activated){
 		post("%s: missed the end of the last event; setting to end of buffer",OBJECT_NAME);
-		SETFLOAT(listdata+((event_count*2) + 1), buffer_duration);
+		atom_setfloat(listdata+((event_count*2) + 1), buffer_duration);
 		++event_count;
 	}
 	outlet_list(x->list, 0, event_count * 2, listdata);
+    exit: buffer_unlocksamples(wavebuf_b);
 }
-*/
 
-/*
+
+
 void buffet_pevents(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 {
 	float *b_samples;
 	long b_nchans;
 	long b_frames;
+    t_buffer_obj *wavebuf_b;
 	t_atom *listdata = x->listdata;
 	
 	float bufsize;
@@ -632,12 +617,31 @@ void buffet_pevents(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 	float *analbuf = x->analbuf;
 	float *onset = x->onset;
 	//float endtime;
-	
+/*
 	buffet_setbuf(x, x->wavename);
 	b_samples = x->wavebuf->b_samples;
 	b_nchans = x->wavebuf->b_nchans;
 	b_frames = x->wavebuf->b_frames;
-	
+*/
+    if(!x->src_buffer_ref){
+        x->src_buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
+    } else{
+        buffer_ref_set(x->src_buffer_ref, x->wavename);
+    }
+    
+    wavebuf_b = buffer_ref_getobject(x->src_buffer_ref);
+    if(wavebuf_b == NULL){
+        post("buffer %s is null", x->wavename->s_name);
+        return;
+    }
+    b_nchans = buffer_getchannelcount(wavebuf_b);
+    b_frames= buffer_getframecount(wavebuf_b);
+    b_samples = buffer_locksamples(wavebuf_b);
+    if(! b_samples ){
+        post("invalid samples");
+        goto exit;
+    }
+    
 	// duration in ms.
 	buffer_duration = 1000.0 * (float)b_frames / x->sr;
 	
@@ -712,11 +716,12 @@ void buffet_pevents(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 
 	
 	for(i = 0; i < event_count; i++){
-		SETFLOAT(listdata + i, onset[i]);
+		atom_setfloat(listdata + i, onset[i]);
 	}
 	outlet_list(x->list, 0, event_count, listdata);
+    exit: buffer_unlocksamples(wavebuf_b);
 }
-*/
+
 void buffet_internal_fadeout(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 {
 	long fadeframes;
@@ -903,12 +908,19 @@ void buffet_copy_to_buffer(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 		return;
 	}
 	/* first clean out destination */
-	memset((char *)b_dest_samples, 0, b_dest_frames * b_dest_nchans * sizeof(float));
+	// memset((char *)b_dest_samples, 0, b_dest_frames * b_dest_nchans * sizeof(float));
+    
+    for(i = 0; i < b_dest_frames * b_dest_nchans; i++){
+        b_dest_samples[i] = 0.0;
+    }
 	
 	/* now copy segment */
+    /*
 	memcpy(b_dest_samples, b_samples + (startframe * b_nchans),
 		   chunkframes * b_nchans * sizeof(float) );
-	
+	*/
+    sysmem_copyptr(b_samples + (startframe * b_nchans), b_dest_samples, chunkframes * b_nchans * sizeof(float));
+    
 	if(argc == 5){
 		//		post("enveloping");
 		fadein = atom_getfloatarg(3,argc,argv);
@@ -1012,9 +1024,9 @@ void buffet_copy_to_mono_buffer(t_buffet *x, t_symbol *msg, short argc, t_atom *
         goto exit;
     }
     
-    b_dest_nchans = buffer_getchannelcount(wavebuf_b);
-    b_dest_frames= buffer_getframecount(wavebuf_b);
-	b_dest_samples = buffer_locksamples(wavebuf_b);
+    b_dest_nchans = buffer_getchannelcount(destbuf_b);
+    b_dest_frames= buffer_getframecount(destbuf_b);
+	b_dest_samples = buffer_locksamples(destbuf_b);
     // buffer_unlocksamples(wavebuf_b);
     if(! b_samples){
         goto exit;
@@ -1050,8 +1062,12 @@ void buffet_copy_to_mono_buffer(t_buffet *x, t_symbol *msg, short argc, t_atom *
 		endframe = b_frames;
 	}
 	/* first clean out destination */
-	memset((char *)b_dest_samples, 0, b_dest_frames * sizeof(float));
+	// memset((char *)b_dest_samples, 0, b_dest_frames * sizeof(float));
 	
+    for(i = 0; i < b_dest_frames * b_dest_nchans; i++){
+        b_dest_samples[i] = 0.0;
+    }
+    
 	/* now copy segment */
 	/*
 	 memcpy(b_dest_samples, b_samples + (startframe * b_nchans),
@@ -1158,7 +1174,7 @@ void buffet_rmschunk(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 	
 	startframe = .001 * x->sr * atom_getfloatarg(0,argc,argv);
 	endframe = .001 * x->sr * atom_getfloatarg(1,argc,argv);
-	if(startframe < 0 || startframe >= b_frames - 1){
+	if(startframe < 0 || startframe >= b_frames){ // fixed 1 sample error here
 		error("%s: naughty start frame: %d",OBJECT_NAME,startframe);
 		goto exit;
 	}
@@ -1281,7 +1297,11 @@ void buffet_erase(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 	}
 	
 	if(startframe == 0 ){
-		memset((char *)b_samples, 0, b_nchans * endframe * sizeof(float));
+		// memset((char *)b_samples, 0, b_nchans * endframe * sizeof(float));
+        
+        for(i = 0; i < b_nchans * endframe; i++){
+            b_samples[i] = 0.0;
+        }
 	} else {
 		for(i = startframe * b_nchans; i < endframe * b_nchans; i++){
 			b_samples[i] = 0.0;
@@ -1323,26 +1343,31 @@ void buffet_rotatetozero(t_buffet *x, double f)
 		goto exit;
 	}
 	
-	tmpmem = (float *) malloc(shiftframes * b_nchans * sizeof(float));
+	tmpmem = (float *) sysmem_newptr(shiftframes * b_nchans * sizeof(float));
 	
 	/* copy shift block to tmp */
 	
-	memcpy(tmpmem, b_samples, shiftframes * b_nchans * sizeof(float));
+	// memcpy(tmpmem, b_samples, shiftframes * b_nchans * sizeof(float));
 	
+    sysmem_copyptr(b_samples, tmpmem, shiftframes * b_nchans * sizeof(float));
 	
 	/* now shift the rest to the top */
 	
-	memmove(b_samples, b_samples + (shiftframes * b_nchans),
-			(b_frames - shiftframes) * b_nchans * sizeof(float));
+	/* memmove(b_samples, b_samples + (shiftframes * b_nchans),
+			(b_frames - shiftframes) * b_nchans * sizeof(float)); */
 	
+    // this could easily fail ??
+    sysmem_copyptr(b_samples + (shiftframes * b_nchans), b_samples, (b_frames - shiftframes) * b_nchans * sizeof(float));
 	
 	/* finally copy tmp to the tail */
 	
 	
-	memcpy(b_samples + (b_frames - shiftframes) * b_nchans,tmpmem,
-		   shiftframes * b_nchans * sizeof(float ));
+	/* memcpy(b_samples + (b_frames - shiftframes) * b_nchans,tmpmem,
+		   shiftframes * b_nchans * sizeof(float )); */
 	
-	free(tmpmem);
+    sysmem_copyptr(tmpmem, b_samples + (b_frames - shiftframes) * b_nchans, shiftframes * b_nchans * sizeof(float ));
+    
+	sysmem_freeptr(tmpmem);
 	buffet_update(x);
     exit: buffer_unlocksamples(wavebuf_b);
 }
@@ -1680,11 +1705,11 @@ void *buffet_new(t_symbol *msg, short argc, t_atom *argv)
 {
     t_buffet *x = (t_buffet *)object_alloc(buffet_class);
  	srand(clock());
-	
+	dsp_setup((t_pxobject *)x,0);
 	x->floater = floatout((t_pxobject *)x); // right outlet
 	x->list = listout((t_pxobject *)x); // middle outlet
 	x->bang = bangout((t_pxobject *)x); // left outlet
-	dsp_setup((t_pxobject *)x,1);
+	//
 	
 	x->sr = sys_getsr();
 	if(! x->sr )
@@ -1725,24 +1750,21 @@ void buffet_init(t_buffet *x, short initialized)
 		x->storage_maxframes = x->maxframes *= .001 * x->sr;
 		x->fade = .001 * 20 * x->sr; // 20 ms fadetime to start
 		x->storage_bytes = (x->maxframes + 1) * 2 * sizeof(float); // stereo storage frames
-		x->storage = (float *) malloc(x->storage_bytes);
+		x->storage = (float *) sysmem_newptr(x->storage_bytes);
 		x->dc_coef = .995; // for dc blocker
 		x->dc_gain = 4.0;
-		x->rmsbuf = (float *) malloc(MAX_RMS_BUFFER * x->sr * sizeof(float));
-		memset((char *)x->rmsbuf, 0, MAX_RMS_BUFFER * x->sr * sizeof(float));
-		x->listdata = (t_atom *)malloc(MAX_EVENTS * sizeof(t_atom)); // lots of events
-		x->analbuf = (float *) malloc(MAX_RMS_FRAMES * sizeof(float));
-		memset((char *)x->analbuf, 0, MAX_RMS_FRAMES * sizeof(float));
-		x->onset = (float *) malloc(MAX_EVENTS * sizeof(float));
+		x->rmsbuf = (float *) sysmem_newptrclear(MAX_RMS_BUFFER * x->sr * sizeof(float));
+		x->listdata = (t_atom *)sysmem_newptr(MAX_EVENTS * sizeof(t_atom)); // lots of events
+		x->analbuf = (float *) sysmem_newptrclear(MAX_RMS_FRAMES * sizeof(float));
+		x->onset = (float *) sysmem_newptr(MAX_EVENTS * sizeof(float));
 		x->initialized = 1;
 	} else {
 		x->minframes *= .001 * x->sr;
 		x->storage_maxframes = x->maxframes *= .001 * x->sr;
 		x->fade = .001 * 20 * x->sr; // 20 ms fadetime to start
 		x->storage_bytes = (x->maxframes + 1) * 2 * sizeof(float); // stereo storage frames
-		x->storage = (float *) realloc((char *)x->storage_bytes,x->storage_bytes);
-		x->rmsbuf = (float *)realloc((char *)x->rmsbuf,MAX_RMS_BUFFER * x->sr * sizeof(float));
-		memset((char *)x->rmsbuf, 0, MAX_RMS_BUFFER * x->sr * sizeof(float));
+		x->storage = (float *) sysmem_resizeptr((void *)x->storage_bytes,x->storage_bytes);
+		x->rmsbuf = (float *)sysmem_resizeptrclear((void *)x->rmsbuf,MAX_RMS_BUFFER * x->sr * sizeof(float));
 	}
 }
 
@@ -2310,6 +2332,89 @@ void buffet_setbuf(t_buffet *x, t_symbol *wavename)
 }
 
 
+void buffet_catbuf(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
+{
+    t_buffer_obj *srcbuf_b;
+    t_buffer_obj *catbuf_b;
+    t_symbol *dubsource;
+    long b_nchans;
+    long b_frames;
+    long b_cat_nchans,b_cat_frames;
+    float *b_samples, *b_cat_samples;
+    float *storage = NULL; // copy current contents here before resizing
+    
+
+    short argcc = 1;
+    t_atom argvv;
+    long sizethis, sizecat, newsize, oldframes;
+    
+    /* Load source buffer */
+    
+    if(!x->src_buffer_ref){
+        x->src_buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
+    } else{
+        buffer_ref_set(x->src_buffer_ref, x->wavename);
+    }
+    srcbuf_b = buffer_ref_getobject(x->src_buffer_ref);
+    if(srcbuf_b == NULL){
+        // warning message here...
+        return;
+    }
+    b_nchans = buffer_getchannelcount(srcbuf_b);
+    b_frames= buffer_getframecount(srcbuf_b);
+    b_samples = buffer_locksamples(srcbuf_b);
+    
+    /* Load buffer to concatenate */
+    
+    dubsource = atom_getsymarg(0,argc,argv);
+    if(!x->cat_buffer_ref){
+        x->cat_buffer_ref = buffer_ref_new((t_object*)x, dubsource);
+    } else {
+        buffer_ref_set(x->cat_buffer_ref, dubsource);
+    }
+    catbuf_b = buffer_ref_getobject(x->cat_buffer_ref);
+    if(catbuf_b == NULL){
+        // warning message here...
+        buffer_unlocksamples(srcbuf_b);
+        return;
+    }
+    
+    b_cat_nchans = buffer_getchannelcount(catbuf_b);
+    b_cat_frames = buffer_getframecount(catbuf_b);
+    b_cat_samples = buffer_locksamples(catbuf_b);
+    
+    if( b_cat_nchans != b_nchans ){
+        error("%s: channel mismatch between %s (%d chans) and %s (%d chans)",
+              x->wavename->s_name, b_nchans, dubsource->s_name, b_cat_nchans);
+        goto zero;
+    }
+    
+    sizethis = sizeof(float) * b_nchans * b_frames;
+    sizecat = sizeof(float) * b_cat_nchans * b_cat_frames;
+    storage = (float *) sysmem_newptr( sizethis );
+    newsize = (b_frames + b_cat_frames); // new frame size
+    sysmem_copyptr(b_samples, storage, sizethis);
+    
+    oldframes = b_frames;
+    atom_setfloat(&argvv,newsize);
+    
+    buffer_unlocksamples(srcbuf_b);
+    typedmess((void *)srcbuf_b, gensym("sizeinsamps"), argcc, &argvv);
+    b_samples = buffer_locksamples(srcbuf_b);
+    sysmem_copyptr(storage, b_samples, sizethis);
+    sysmem_copyptr(b_cat_samples, b_samples + (oldframes * b_nchans), b_cat_frames * b_cat_nchans * sizeof(float));
+zero:
+    buffer_unlocksamples(srcbuf_b);
+    buffer_unlocksamples(catbuf_b);
+    buffet_update(x);
+    if(storage != NULL){
+        sysmem_freeptr(storage);
+    }
+}
+
+
+
+
 t_int *buffet_perform(t_int *w)
 {
 	t_buffet *x = (t_buffet *) (w[1]);
@@ -2332,13 +2437,13 @@ float buffet_boundrand(float min, float max)
 void buffet_dsp_free(t_buffet *x)
 {
 	dsp_free((t_pxobject *)x);
-	free(x->storage);
-	free(x->listdata);
-	free(x->rmsbuf);
-	free(x->analbuf);
-	free(x->onset);
-    object_free(x->src_buffer_ref);
-    object_free(x->dest_buffer_ref);
+	sysmem_freeptr(x->storage);
+	sysmem_freeptr(x->listdata);
+	sysmem_freeptr(x->rmsbuf);
+	sysmem_freeptr(x->analbuf);
+	sysmem_freeptr(x->onset);
+    // object_free(x->src_buffer_ref);
+    // object_free(x->dest_buffer_ref);
 }
 
 void buffet_resize(t_buffet *x, t_floatarg newsize)
@@ -2347,7 +2452,7 @@ void buffet_resize(t_buffet *x, t_floatarg newsize)
 	t_atom *argv;
 	t_symbol *sizemsg;
 	
-	argv = (t_atom *) malloc(sizeof(t_atom));
+	argv = (t_atom *) sysmem_newptr(sizeof(t_atom));
 	sizemsg = gensym("size");
 	atom_setfloat(argv,newsize);
 
@@ -2381,3 +2486,29 @@ void buffet_assist (t_buffet *x, void *b, long msg, long arg, char *dst)
 	}
 }
 
+t_max_err buffet_notify(t_buffet *x, t_symbol *s, t_symbol *msg, void *sender, void *data)
+{
+//    buffer_ref_notify(x->dest_buffer_ref, s, msg, sender, data);
+    return buffer_ref_notify(x->src_buffer_ref, s, msg, sender, data);
+}
+
+
+
+
+
+void buffet_dsp64(t_buffet *x, t_object *dsp64, short *count, double samplerate, long maxvectorsize, long flags)
+{
+    // dsp_add64(dsp64, (t_object *)x, (t_perfroutine64)buffet_perform64, 0, NULL);
+}
+
+void buffet_perform64(t_buffet *x, t_object *dsp64, double **ins, long numins, double **outs, long numouts, long sampleframes, long flags, void *userparam)
+{
+    t_double	*out = outs[0];
+    int			n = sampleframes;
+    while (n--){
+        *out++ = 0.0;
+    }
+}
+
+ 
+        
