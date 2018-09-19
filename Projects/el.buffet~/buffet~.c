@@ -20,6 +20,7 @@ typedef struct _buffet
     t_buffer_ref *src_buffer_ref; // MSP reference to the buffer
     t_buffer_ref *dest_buffer_ref; // MSP reference to dest buffer for copying
     t_buffer_ref *cat_buffer_ref; // MSP reference to buffer to concatenate
+    t_buffer_ref *dub_buffer_ref; // MSP reference to buffer to overdub
     float sr; // sampling rate
     short hosed; // buffers are bad
     float minframes; // minimum replacement block in sample frames
@@ -336,8 +337,8 @@ void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 	float evpval;
 	long b_nchans;
 	t_symbol *dubname;
-    t_buffer_ref *dubref;
-    t_buffer_ref *srcref;
+//    t_buffer_ref *dubref;
+//    t_buffer_ref *srcref;
     t_buffer_obj *dubbuf;
     t_buffer_obj *srcbuf;
     
@@ -366,11 +367,22 @@ void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 	fadeout_frames = ms2frames( val, x->sr );
 //	thisbuf->myname = x->wavename; // current name of this buffer
 	
-
-    dubref = buffer_ref_new((t_object*)x, dubname);
-    srcref = buffer_ref_new((t_object*)x, x->wavename);
-    dubbuf = buffer_ref_getobject(dubref);
-    srcbuf = buffer_ref_getobject(srcref);
+    if(!x->src_buffer_ref){
+        x->src_buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
+    } else{
+        buffer_ref_set(x->src_buffer_ref, x->wavename);
+    }
+// dub_buffer_ref
+    if(!x->dub_buffer_ref){
+        x->dub_buffer_ref = buffer_ref_new((t_object*)x, dubname);
+    } else{
+        buffer_ref_set(x->src_buffer_ref, x->wavename);
+    }
+    
+    // dubref = buffer_ref_new((t_object*)x, dubname);
+    // srcref = buffer_ref_new((t_object*)x, x->wavename);
+    dubbuf = buffer_ref_getobject(x->dub_buffer_ref);
+    srcbuf = buffer_ref_getobject(x->src_buffer_ref);
   
     if(dubbuf == NULL){
         post("buffer %s is null", dubname->s_name);
@@ -458,7 +470,14 @@ void buffet_info(t_buffet *x)
 	long totalframes;
 	t_buffer_obj *the_buffer;
     
+    
+    if(!x->src_buffer_ref){
+        x->src_buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
+    } else{
+        buffer_ref_set(x->src_buffer_ref, x->wavename);
+    }
     the_buffer = buffer_ref_getobject(x->src_buffer_ref);
+    
     
 	totalframes = buffer_getframecount(the_buffer);
 	post("minswap: %f, maxswap: %f", 1000. * x->minframes / x->sr, 1000. * x->maxframes / x->sr);
@@ -967,6 +986,8 @@ void buffet_copy_to_buffer(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 			}
 		}
 	}
+    buffer_unlocksamples(srcbuf_b);
+    buffer_unlocksamples(destbuf_b);
 	object_method( (t_object *)destbuf_b, gensym("dirty") );
 	outlet_bang(x->bang);	
 }
