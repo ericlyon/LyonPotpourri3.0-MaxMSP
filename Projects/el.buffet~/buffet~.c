@@ -121,7 +121,7 @@ int C74_EXPORT main(void)
     class_addmethod(c,(method)buffet_rmschunk,"rmschunk", A_GIMME, 0);
     class_addmethod(c,(method)buffet_erase,"erase", A_GIMME, 0);
     class_addmethod(c,(method)buffet_copy_to_buffer,"copy_to_buffer", A_GIMME, 0);
-	class_addmethod(c,(method)buffet_copy_to_mono_buffer,"copy_to_mono_buffer", A_GIMME, 0);
+    class_addmethod(c,(method)buffet_copy_to_mono_buffer,"copy_to_mono_buffer", A_GIMME, 0);
     class_addmethod(c,(method)buffet_internal_fadeout,"internal_fadeout", A_GIMME, 0);
     class_addmethod(c,(method)buffet_assist,"assist", A_CANT, 0);
     class_addmethod(c,(method)buffet_dblclick,"dblclick", A_CANT, 0);
