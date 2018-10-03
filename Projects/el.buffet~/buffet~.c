@@ -93,6 +93,7 @@ void buffet_catbuf(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
 void buffet_trimzero(t_buffet *x, t_symbol *msg, short argc, t_atom *argv);
 void buffet_update(t_buffet *x);
 void buffet_spritz(t_buffet *x,  t_symbol *msg, short argc, t_atom *argv);
+void buffet_expenv(t_buffet *x,  t_symbol *msg, short argc, t_atom *argv);
 //void buffet_attach_any_buffer(t_buffet *x, t_buffer_ref *ref, t_symbol *wavename);
 //void buffet_attach_buffer(t_buffet *x);
 t_max_err buffet_notify(t_buffet *x, t_symbol *s, t_symbol *msg, void *sender, void *data);
@@ -136,6 +137,7 @@ int C74_EXPORT main(void)
     class_addmethod(c,(method)buffet_info,"info", 0);
 	class_addmethod(c,(method)buffet_resize,"resize", A_FLOAT, 0);
 	class_addmethod(c,(method)buffet_spritz,"spritz", A_GIMME, 0);
+    class_addmethod(c,(method)buffet_expenv,"expenv", A_GIMME, 0);
     class_addmethod(c,(method)buffet_notify,"notify", A_CANT, 0);
     class_addmethod(c,(method)buffet_dsp64,"dsp64", A_CANT, 0);
 	class_addmethod(c,(method)buffet_normalize_selection,"normalize_selection", A_GIMME, 0);
@@ -1499,7 +1501,6 @@ void buffet_normalize(t_buffet *x, double f)
 
 void buffet_normalize_selection(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 {
-	
 	float target;
 	float *b_samples;
 	long b_nchans;
@@ -1568,6 +1569,53 @@ void buffet_normalize_selection(t_buffet *x, t_symbol *msg, short argc, t_atom *
 }
 
 
+void buffet_expenv(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
+{
+    float *b_samples;
+    long b_nchans;
+    long b_frames;
+    long i,j;
+    double curve, linval;
+    double lambda, dest;
+    double e = 2.718281828459;
+    t_buffer_obj *wavebuf_b;
+    
+    if(argc != 2){
+        post("%s: target_amp lambda",OBJECT_NAME);
+        return;
+    }
+    
+    if(!x->src_buffer_ref){
+        x->src_buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
+    } else{
+        buffer_ref_set(x->src_buffer_ref, x->wavename);
+    }
+    wavebuf_b = buffer_ref_getobject(x->src_buffer_ref);
+    if(wavebuf_b == NULL){
+        return;
+    }
+    b_nchans = buffer_getchannelcount(wavebuf_b);
+    b_frames= buffer_getframecount(wavebuf_b);
+    b_samples = buffer_locksamples(wavebuf_b);
+    if(! b_samples ){
+        goto exit;
+    }
+    dest = atom_getfloatarg(0,argc,argv);
+    lambda = atom_getfloatarg(1,argc,argv);
+    for(i = 0; i < b_frames; i++){
+        // frak = (double) i / (double) (b_nchans - 1);
+        linval = dest + ((double)i/(double)b_frames);
+        curve = pow(e, lambda * linval);
+        for(j = 0; j < b_nchans; j++){
+            b_samples[ (i * b_nchans) + j] *= curve;
+        }
+    }
+    object_method( (t_object *)wavebuf_b, gensym("dirty") );
+exit:
+    buffer_unlocksamples(wavebuf_b);
+    outlet_bang(x->bang);
+}
+
 
 void buffet_fadein(t_buffet *x, double f)
 {
@@ -1583,9 +1631,6 @@ void buffet_fadein(t_buffet *x, double f)
 		error("zero sample rate!");
 		return;
 	}
-
-	// we could put in a small ramp on norm if we feel like it
-	
     if(!x->src_buffer_ref){
         x->src_buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
     } else{
@@ -1603,8 +1648,6 @@ void buffet_fadein(t_buffet *x, double f)
     }
     
 	fadeframes = f * .001 * x->sr;
-	//post("fading in %d frames",fadeframes);
-
 	if( fadeframes > b_frames){
 		error("fadein is too long");
 		goto exit;
