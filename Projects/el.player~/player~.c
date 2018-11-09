@@ -588,7 +588,8 @@ void player_dsp_free(t_player *x)
 	free(x->events);
 }
 
-void player_dsp64(t_player *x, t_object *dsp64, short *count, double sr, long n, long flags)
+void
+(t_player *x, t_object *dsp64, short *count, double sr, long n, long flags)
 {
     /*
     //   post("64 bit version of player~");
