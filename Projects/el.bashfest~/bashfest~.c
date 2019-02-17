@@ -1,5 +1,6 @@
-
+#import "MSPd.h"
 #include "bashfest.h"
+
 /// #import "MSPd.h"
 // Updated for Pd 6 December 2006
 // added protection for setbuf (renamed attach_buffer)
@@ -84,6 +85,7 @@ t_max_err bashfest_latency_set(t_bashfest *x, void *attr, long ac, t_atom *av);
 void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins, 
                         long numins, double **outs,long numouts, long vectorsize,
                         long flags, void *userparam);
+t_max_err bashfest_notify(t_bashfest *x, t_symbol *s, t_symbol *msg, void *sender, void *data);
 
 int C74_EXPORT main(void)
 {
@@ -109,6 +111,7 @@ int C74_EXPORT main(void)
 	class_addmethod(c,(method)bashfest_minimum_process,"minimum_process", A_FLOAT, 0);
 	class_addmethod(c,(method)bashfest_block_dsp,"block_dsp", A_FLOAT, 0);
     class_addmethod(c, (method)bashfest_dsp64, "dsp64", A_CANT,0);
+    class_addmethod(c, (method)bashfest_notify, "notify", A_CANT, 0);
 	
 	CLASS_ATTR_LONG(c, "latency", 0, t_bashfest, latency_samples);
 	CLASS_ATTR_DEFAULT_SAVE(c, "latency", 0, "8192");
@@ -119,6 +122,11 @@ int C74_EXPORT main(void)
 	bashfest_class = c;	
 	potpourri_announce(OBJECT_NAME);
 	return 0;
+}
+
+t_max_err bashfest_notify(t_bashfest *x, t_symbol *s, t_symbol *msg, void *sender, void *data)
+{
+    return buffer_ref_notify(x->buffer_ref, s, msg, sender, data);
 }
 
 void bashfest_block_dsp(t_bashfest *x, t_floatarg t)
@@ -351,7 +359,6 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	x->sinewave = (float *) sysmem_newptr( (x->sinelen + 1) * sizeof(float));
 	x->params = (float *) sysmem_newptr(MAX_PARAMETERS * sizeof(float));
 	x->odds = (float *) sysmem_newptr(64 * sizeof(float));
-	//  x->trigger_buffer = calloc(x->latency_samples, sizeof(float));
 	
 	for(i=0;i<64;i++)
 		x->odds[i] = 0;

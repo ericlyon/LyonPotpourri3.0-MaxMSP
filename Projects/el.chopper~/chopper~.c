@@ -209,6 +209,7 @@ int C74_EXPORT main(void)
 	
 	chopper_class = c;
 	potpourri_announce(OBJECT_NAME);
+    post("updated chopper~ version\n");
     
 	return 0;
 }
@@ -818,32 +819,12 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 	long active_outlets;
 	t_buffer_obj *the_buffer;
     
-	// quick bail on bad buffer!
- //   chopper_attach_buffer(x);
-    /*
-    if (!x->buffer_ref)
-        x->buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
-    else
-        buffer_ref_set(x->buffer_ref, x->wavename);
-    */
+
     the_buffer = buffer_ref_getobject(x->buffer_ref);
     if ( the_buffer == NULL){
-        // object_post((t_object *)x, "\"%s\" is an invalid buffer", x->wavename->s_name);
         goto zero;
     }
     
-    /*
-    if (!x->buffer_ref)
-        x->buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
-    else
-        buffer_ref_set(x->buffer_ref, x->wavename);
-    the_buffer = buffer_ref_getobject(x->buffer_ref);
-    
-    if ( the_buffer == NULL){
-        object_post((t_object *)x, "\"%s\" is an invalid buffer", x->wavename->s_name);
-        goto zero;
-    }
-    */
 	tab = buffer_locksamples(the_buffer);
 	if (!tab){
         goto zero;
@@ -870,15 +851,18 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
             object_post((t_object *)x, "mismatch between buffer \"%s\" which has %d channels and the chopper~ which requires %d channels",
                         x->wavename->s_name, nc, x->outlet_count);
         }
-        buffer_perform_end(the_buffer);
-        return;
+        //buffer_perform_end(the_buffer);
+        // buffer_unlocksamples(the_buffer);
+        goto zero;
     }
     if(frames == 0){
         if(!x->already_failed){
             x->already_failed = 1;
             object_post((t_object *)x, "\"%s\" is an empty buffer", x->wavename->s_name);
         }
-        buffer_perform_end(the_buffer);
+        // buffer_perform_end(the_buffer);
+        // buffer_unlocksamples(the_buffer);
+        goto zero;
         return;
     }
     

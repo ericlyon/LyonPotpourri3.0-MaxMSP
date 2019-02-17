@@ -7,19 +7,29 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		07B9A6541731CA3E00EE7EB7 /* granule~.c in Sources */ = {isa = PBXBuildFile; fileRef = 07B9A6531731CA3E00EE7EB7 /* granule~.c */; };
 		07F99BC1173142E8005AE3BB /* MSPd.h in Headers */ = {isa = PBXBuildFile; fileRef = 07F99BC0173142E8005AE3BB /* MSPd.h */; };
+		07F99BC71731432E005AE3BB /* chameleon_dsp.c in Sources */ = {isa = PBXBuildFile; fileRef = 07F99BC21731432E005AE3BB /* chameleon_dsp.c */; };
+		07F99BC81731432E005AE3BB /* chameleon_helper.c in Sources */ = {isa = PBXBuildFile; fileRef = 07F99BC31731432E005AE3BB /* chameleon_helper.c */; };
+		07F99BC91731432E005AE3BB /* chameleon.h in Headers */ = {isa = PBXBuildFile; fileRef = 07F99BC41731432E005AE3BB /* chameleon.h */; };
+		07F99BCA1731432E005AE3BB /* chameleon~.c in Sources */ = {isa = PBXBuildFile; fileRef = 07F99BC51731432E005AE3BB /* chameleon~.c */; };
+		07F99BCB1731432E005AE3BB /* ellipse.c in Sources */ = {isa = PBXBuildFile; fileRef = 07F99BC61731432E005AE3BB /* ellipse.c */; };
+		07F99BCD17314333005AE3BB /* ugens.h in Headers */ = {isa = PBXBuildFile; fileRef = 07F99BCC17314333005AE3BB /* ugens.h */; };
 		22922AD30F38D67900B1EFEA /* commonsyms.c in Sources */ = {isa = PBXBuildFile; fileRef = 22922AD20F38D67900B1EFEA /* commonsyms.c */; };
 		22CF116E0EE9A7700054F513 /* MaxAudioAPI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22CF116D0EE9A7700054F513 /* MaxAudioAPI.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		07B9A6531731CA3E00EE7EB7 /* granule~.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "granule~.c"; sourceTree = "<group>"; };
 		07F99BC0173142E8005AE3BB /* MSPd.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = MSPd.h; path = ../../MSPd.h; sourceTree = "<group>"; };
+		07F99BC21731432E005AE3BB /* chameleon_dsp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = chameleon_dsp.c; sourceTree = "<group>"; };
+		07F99BC31731432E005AE3BB /* chameleon_helper.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = chameleon_helper.c; sourceTree = "<group>"; };
+		07F99BC41731432E005AE3BB /* chameleon.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = chameleon.h; sourceTree = "<group>"; };
+		07F99BC51731432E005AE3BB /* chameleon~.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "chameleon~.c"; sourceTree = "<group>"; };
+		07F99BC61731432E005AE3BB /* ellipse.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ellipse.c; sourceTree = "<group>"; };
+		07F99BCC17314333005AE3BB /* ugens.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ugens.h; sourceTree = "<group>"; };
 		22922AD20F38D67900B1EFEA /* commonsyms.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = commonsyms.c; path = "../../../c74support/max-includes/common/commonsyms.c"; sourceTree = SOURCE_ROOT; };
 		22CF10220EE984600054F513 /* maxmspsdk.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = maxmspsdk.xcconfig; path = ../../maxmspsdk.xcconfig; sourceTree = SOURCE_ROOT; };
 		22CF116D0EE9A7700054F513 /* MaxAudioAPI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MaxAudioAPI.framework; path = "../../../c74support/msp-includes/MaxAudioAPI.framework"; sourceTree = SOURCE_ROOT; };
-		2FBBEAE508F335360078DB84 /* el.granule~.mxo */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "el.granule~.mxo"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2FBBEAE508F335360078DB84 /* el.chameleon~.mxo */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "el.chameleon~.mxo"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -40,7 +50,12 @@
 				22CF10220EE984600054F513 /* maxmspsdk.xcconfig */,
 				22922AD20F38D67900B1EFEA /* commonsyms.c */,
 				07F99BC0173142E8005AE3BB /* MSPd.h */,
-				07B9A6531731CA3E00EE7EB7 /* granule~.c */,
+				07F99BC21731432E005AE3BB /* chameleon_dsp.c */,
+				07F99BC31731432E005AE3BB /* chameleon_helper.c */,
+				07F99BC41731432E005AE3BB /* chameleon.h */,
+				07F99BC51731432E005AE3BB /* chameleon~.c */,
+				07F99BC61731432E005AE3BB /* ellipse.c */,
+				07F99BCC17314333005AE3BB /* ugens.h */,
 				22CF116D0EE9A7700054F513 /* MaxAudioAPI.framework */,
 				19C28FB4FE9D528D11CA2CBB /* Products */,
 			);
@@ -50,7 +65,7 @@
 		19C28FB4FE9D528D11CA2CBB /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				2FBBEAE508F335360078DB84 /* el.granule~.mxo */,
+				2FBBEAE508F335360078DB84 /* el.chameleon~.mxo */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -63,6 +78,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				07F99BC1173142E8005AE3BB /* MSPd.h in Headers */,
+				07F99BC91731432E005AE3BB /* chameleon.h in Headers */,
+				07F99BCD17314333005AE3BB /* ugens.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,7 +102,7 @@
 			);
 			name = "max-external";
 			productName = iterator;
-			productReference = 2FBBEAE508F335360078DB84 /* el.granule~.mxo */;
+			productReference = 2FBBEAE508F335360078DB84 /* el.chameleon~.mxo */;
 			productType = "com.apple.product-type.bundle";
 		};
 /* End PBXNativeTarget section */
@@ -96,7 +113,7 @@
 			attributes = {
 				LastUpgradeCheck = 1010;
 			};
-			buildConfigurationList = 2FBBEACF08F335010078DB84 /* Build configuration list for PBXProject "el.granule~" */;
+			buildConfigurationList = 2FBBEACF08F335010078DB84 /* Build configuration list for PBXProject "el.chameleon~" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = English;
 			hasScannedForEncodings = 1;
@@ -138,7 +155,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				22922AD30F38D67900B1EFEA /* commonsyms.c in Sources */,
-				07B9A6541731CA3E00EE7EB7 /* granule~.c in Sources */,
+				07F99BC71731432E005AE3BB /* chameleon_dsp.c in Sources */,
+				07F99BC81731432E005AE3BB /* chameleon_helper.c in Sources */,
+				07F99BCA1731432E005AE3BB /* chameleon~.c in Sources */,
+				07F99BCB1731432E005AE3BB /* ellipse.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -225,7 +245,7 @@
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
 				OTHER_LDFLAGS = "$(C74_SYM_LINKER_FLAGS)";
-				PRODUCT_NAME = "el.granule~";
+				PRODUCT_NAME = "el.chameleon~";
 			};
 			name = Development;
 		};
@@ -242,14 +262,14 @@
 				);
 				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
 				OTHER_LDFLAGS = "$(C74_SYM_LINKER_FLAGS)";
-				PRODUCT_NAME = "el.granule~";
+				PRODUCT_NAME = "el.chameleon~";
 			};
 			name = Deployment;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		2FBBEACF08F335010078DB84 /* Build configuration list for PBXProject "el.granule~" */ = {
+		2FBBEACF08F335010078DB84 /* Build configuration list for PBXProject "el.chameleon~" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				2FBBEAD008F335010078DB84 /* Development */,

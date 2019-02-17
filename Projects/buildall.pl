@@ -13,7 +13,9 @@ while(<*>){
 		print "BUILDING $_\n";
 		$proj = $here . "/" . $_ . "/" . $_ . ".xcodeproj";
 		$builddir = $here . "/" . $_ . "/build";
-		`xcodebuild -project \"$proj\" -configuration Deployment`;
+		`/usr/bin/xcodebuild -project \"$proj\"`;
+        $cmd = "/usr/bin/xcodebuild -project \"$proj\"";
+        print $cmd, "\n";
 		`rm -rf \"$builddir\"`;
     }
 }

@@ -1,5 +1,6 @@
 #include "MSPd.h"
 
+
 /* comment */
 
 static t_class *function_class;
@@ -33,6 +34,8 @@ void function_gaussian(t_function *x);
 
 void buffet_update(t_function *x);
 int function_openbuf(t_function *x);
+t_max_err function_notify(t_function *x, t_symbol *s, t_symbol *msg, void *sender, void *data);
+
 
 int C74_EXPORT main(void)
 {
@@ -46,6 +49,7 @@ int C74_EXPORT main(void)
     class_addmethod(c,(method)function_gaussian,"gaussian", A_GIMME, 0);
     class_addmethod(c,(method)function_normalize,"normalize", A_FLOAT, 0);
     class_addmethod(c,(method)function_rcos,"rcos", 0);
+    class_addmethod(c, (method)function_notify, "notify", A_CANT, 0);
 	class_dspinit(c);
 	class_register(CLASS_BOX, c);
 	function_class = c;
@@ -59,6 +63,11 @@ void *function_new(t_symbol *msg, short argc, t_atom *argv)
     x->wavename = atom_getsymarg(0,argc,argv);
     x->normalize = 1;
     return x;
+}
+
+t_max_err function_notify(t_function *x, t_symbol *s, t_symbol *msg, void *sender, void *data)
+{
+    return buffer_ref_notify(x->src_buffer_ref, s, msg, sender, data);
 }
 
 void function_addsyn(t_function *x, t_symbol *msg, short argc, t_atom *argv)

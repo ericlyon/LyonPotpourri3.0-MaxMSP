@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2FBBEAD608F335360078DB84"
-               BuildableName = "el.granulesf.mxo"
+               BuildableName = "el.chameleon~.mxo"
                BlueprintName = "max-external"
-               ReferencedContainer = "container:el.granulesf.xcodeproj">
+               ReferencedContainer = "container:el.chameleon~.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -46,9 +46,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2FBBEAD608F335360078DB84"
-            BuildableName = "el.granulesf.mxo"
+            BuildableName = "el.chameleon~.mxo"
             BlueprintName = "max-external"
-            ReferencedContainer = "container:el.granulesf.xcodeproj">
+            ReferencedContainer = "container:el.chameleon~.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <AdditionalOptions>
