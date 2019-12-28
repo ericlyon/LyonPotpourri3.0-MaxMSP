@@ -820,6 +820,7 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 	t_buffer_obj *the_buffer;
     
 
+    /*
     the_buffer = buffer_ref_getobject(x->buffer_ref);
     if ( the_buffer == NULL){
         goto zero;
@@ -829,8 +830,18 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 	if (!tab){
         goto zero;
     }
+
+    */
+    
+    the_buffer = buffer_ref_getobject(x->buffer_ref);
+    tab = buffer_locksamples(the_buffer);
+    if(!tab){
+        goto zero;
+    }
+    
     frames = buffer_getframecount(the_buffer);
    // post("framecount %d\n", frames);
+
     if( frames <= 0){
         if(!x->already_failed){
             x->already_failed = 1;
@@ -838,11 +849,8 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
         }
         goto zero;
     }
-    nc = buffer_getchannelcount(the_buffer);
-    // now OWN the buffer, freeing it at the end of this job
 
-    
-    
+    nc = buffer_getchannelcount(the_buffer);
     
     // is buffer zero sized or do its channels not match output channels? DIE!!!!
 	if(x->outlet_count != nc){
@@ -1258,7 +1266,7 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
     buffer_unlocksamples(the_buffer);
     return;
 zero:
-    buffer_unlocksamples(the_buffer);
+//    buffer_unlocksamples(the_buffer);
     for(k = 0; k < n; k++) {
         for(i = 0; i < numouts; i++){
             outs[i][k] = 0.0;

@@ -98,6 +98,7 @@
 			developmentRegion = English;
 			hasScannedForEncodings = 1;
 			knownRegions = (
+				English,
 				en,
 			);
 			mainGroup = 089C166AFE841209C02AAC07 /* iterator */;
@@ -169,8 +170,10 @@
 					"\"$(SRCROOT)/../../../c74support/msp-includes\"",
 				);
 				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
 				OTHER_LDFLAGS = "$(C74_SYM_LINKER_FLAGS)";
 				PRODUCT_NAME = "el.multigrain~";
+				SDKROOT = macosx;
 			};
 			name = Development;
 		};
@@ -185,8 +188,10 @@
 					"$(inherited)",
 					"\"$(SRCROOT)/../../../c74support/msp-includes\"",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
 				OTHER_LDFLAGS = "$(C74_SYM_LINKER_FLAGS)";
 				PRODUCT_NAME = "el.multigrain~";
+				SDKROOT = macosx;
 			};
 			name = Deployment;
 		};
