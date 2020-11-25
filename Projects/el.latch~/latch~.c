@@ -22,7 +22,7 @@ typedef struct _latch
 void *latch_new(t_symbol *s, int argc, t_atom *argv);
 t_int *latch_perform(t_int *w);
 void latch_assist(t_latch *x, void *b, long m, long a, char *s);
-void latch_float(t_latch *x, double f);
+void latch_float(t_latch *x, t_floatarg f);
 void latch_version(t_latch *x);
 void latch_dsp64(t_latch *x, t_object *dsp64, short *count, double sr, long n, long flags);
 void latch_perform64(t_latch *x, t_object *dsp64, double **ins, 
@@ -36,6 +36,7 @@ int C74_EXPORT main(void)
 	
     class_addmethod(c, (method)latch_dsp64, "dsp64", A_CANT, 0);
 	class_addmethod(c, (method)latch_assist,"assist",A_CANT,0);
+    class_addmethod(c, (method)latch_float,"float",A_FLOAT,0);
     class_dspinit(c);
 	class_register(CLASS_BOX, c);
 	latch_class = c;
@@ -119,7 +120,7 @@ void latch_perform64(t_latch *x, t_object *dsp64, double **ins,
 	x->dsamps = dsamps;
 }
 
-void latch_float(t_latch *x, double f)
+void latch_float(t_latch *x, t_floatarg f)
 {
 	long inletnum = proxy_getinlet((t_object *)x);
 	if(inletnum == 1 && f > 0.0){
@@ -136,5 +137,11 @@ void latch_dsp64(t_latch *x, t_object *dsp64, short *count, double sr, long n, l
 	if(x->sr != sr){
 		x->sr = sr;
 		x->dsamps = x->duration * x->sr;
-	}    object_method(dsp64, gensym("dsp_add64"),x,latch_perform64,0,NULL);
+	}
+    if(count[1]){
+        x->connected = 1;
+    } else {
+        x->connected = 0;
+    }
+    object_method(dsp64, gensym("dsp_add64"),x,latch_perform64,0,NULL);
 }
