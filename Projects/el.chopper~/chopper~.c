@@ -1414,10 +1414,12 @@ void chopper_dsp64(t_chopper *x, t_object *dsp64, short *count, double sr, long 
 // here's where we set the buffer~ we're going to access
 void chopper_doset(t_chopper *x, t_symbol *s)
 {
-    if (!x->buffer_ref)
+    if (!x->buffer_ref){
         x->buffer_ref = buffer_ref_new((t_object *)x, s);
-    else
+    } else {
         buffer_ref_set(x->buffer_ref, s);
+    }
+    x->wavename = s;
 }
 
 void chopper_set(t_chopper *x, t_symbol *s)
