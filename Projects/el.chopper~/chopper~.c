@@ -1,4 +1,4 @@
-#include "MSPd.h"
+#include "../include/MSPd.h"
 
 static t_class *chopper_class;
 
@@ -8,7 +8,6 @@ static t_class *chopper_class;
 typedef struct _chopper
 {
     t_pxobject x_obj;
-    // t_buffer_obj *the_buffer; // holds the actual buffer
     t_buffer_ref *buffer_ref; // MSP reference to the buffer
     t_symbol *wavename; // name of waveform buffer
     long l_chan; // may be expendable
@@ -22,24 +21,24 @@ typedef struct _chopper
     float segdur;
     float minincr;
     float maxincr;
-    long loop_samps;
-    long samps_to_go;
-    long loop_start;
-    long bindex ;
-    long taper_samps;
-    long loop_min_samps;
-    long loop_max_samps;
+    int loop_samps;
+    int samps_to_go ;
+    int loop_start;
+    int bindex ;
+    int taper_samps;
+    int loop_min_samps;
+    int loop_max_samps;
     float R;
     float ldev;
     float st_dev ;
     int lock_loop;
-    long force_new_loop;
-    long framesize;
+    int force_new_loop;
+    int framesize;
     short mute;
     short disabled;
-    long outlet_count;
-    long *stored_starts;
-    long *stored_samps;
+    int outlet_count;
+    int *stored_starts;
+    int *stored_samps;
     float *stored_increments;
     short preempt;
     short loop_engaged;
@@ -49,11 +48,11 @@ typedef struct _chopper
     float fixed_increment;
     float retro_odds;
     float fade_level;
-    long transp_loop_samps;
+    int transp_loop_samps;
     float taper_duration;
     short lock_terminated;
-    long preempt_samps;
-    long preempt_count;
+    int preempt_samps;
+    int preempt_count;
     short recalling_loop;
     float jitter_factor;
     float rdur_factor;
@@ -69,7 +68,7 @@ typedef struct _chopper
     short dropout_state; // on or off?
     float amplitude_deviation; // variable gain per iteration (0 .. 1)
     float loop_gain; // actual gain per iteration
-//    t_float **msp_outlets; // link msp outlets just once in perform routine
+    t_float **msp_outlets; // link msp outlets just once in perform routine
     float minseg_attr; // attribute storage
     float maxseg_attr; // attribute storage
 } t_chopper;
@@ -139,7 +138,6 @@ int C74_EXPORT main(void)
 {
 	t_class *c;
 	c = class_new("el.chopper~", (method)chopper_new, (method)dsp_free, sizeof(t_chopper), 0,A_GIMME, 0);
-	
     class_addmethod(c,(method)chopper_dsp64, "dsp64", A_CANT, 0);
 	class_addmethod(c,(method)chopper_set_minincr, "ft1", A_FLOAT, 0);
 	class_addmethod(c,(method)chopper_set_maxincr,"ft2", A_FLOAT, 0);
@@ -149,7 +147,8 @@ int C74_EXPORT main(void)
 	class_addmethod(c,(method)chopper_force_new, "bang", 0);
 	class_addmethod(c,(method)chopper_force_new, "newloop", 0); // synonym for bang
 	class_addmethod(c,(method)chopper_assist, "assist", A_CANT, 0);
-	class_addmethod(c,(method)chopper_dblclick, "dblclick", A_CANT, 0);
+    class_addmethod(c,(method)chopper_dblclick, "dblclick", A_CANT, 0);
+    class_addmethod(c,(method)chopper_notify, "notify", A_CANT, 0);
 	class_addmethod(c,(method)chopper_taper, "taper", A_FLOAT, 0);
 	class_addmethod(c,(method)chopper_fixed_increment, "fixed_increment", A_FLOAT, 0);
 	class_addmethod(c,(method)chopper_retro_odds, "retro_odds", A_FLOAT, 0);
@@ -163,12 +162,10 @@ int C74_EXPORT main(void)
 	class_addmethod(c,(method)chopper_rdur, "rdur", A_FLOAT, 0);
 	class_addmethod(c,(method)chopper_rinc, "rinc", A_FLOAT, 0);
 	class_addmethod(c,(method)chopper_mute, "mute", A_FLOAT, 0);
-	class_addmethod(c,(method)chopper_setbuf, "setbuf", A_SYM, 0);
     class_addmethod(c,(method)chopper_set, "set", A_SYM, 0);
 	class_addmethod(c,(method)chopper_sync_out, "sync_out", 0);
 	class_addmethod(c,(method)chopper_sync_in, "sync_in", A_GIMME, 0);
 	class_addmethod(c,(method)chopper_chopspec, "chopspec", A_GIMME, 0);
-    class_addmethod(c, (method)chopper_notify, "notify", A_CANT, 0);
 	
 	ps_buffer = gensym("buffer~");
 	class_dspinit(c);
@@ -209,7 +206,6 @@ int C74_EXPORT main(void)
 	
 	chopper_class = c;
 	potpourri_announce(OBJECT_NAME);
-    post("updated chopper~ version\n");
     
 	return 0;
 }
@@ -333,7 +329,8 @@ void chopper_mute(t_chopper *x, t_floatarg toggle)
 
 void chopper_seed(t_chopper *x, t_floatarg seed)
 {
-	srand((int)seed);
+    
+	srand((long)seed);
 }
 
 
@@ -552,7 +549,6 @@ void *chopper_new(t_symbol *msg, short argc, t_atom *argv)
 		outlet_new((t_object *)x, "signal");
 	}
 	x->R = (float) sys_getsr();
-    // chopper_set(x,x->wavename);
 	chopper_init(x,0);
 	return (x);
 }
@@ -560,8 +556,8 @@ void *chopper_new(t_symbol *msg, short argc, t_atom *argv)
 void chopper_init(t_chopper *x, short initialized)
 {
 	if(!initialized){
-		srand((int)time(0));
-		// x->msp_outlets = (t_float **) calloc(x->outlet_count, sizeof(t_float *));
+		srand(time(0));
+		x->msp_outlets = (t_float **) calloc(x->outlet_count, sizeof(t_float *));
 		if(!x->R) {
 			error("zero sampling rate - set to 44100");
 			x->R = 44100;
@@ -604,9 +600,9 @@ void chopper_init(t_chopper *x, short initialized)
 		x->dropout_state = 0;
 		x->amplitude_deviation = 0.0;
 		x->loop_gain = 1.0;
-		x->stored_starts = (long *)sysmem_newptrclear(MAXSTORE * sizeof(long));
-		x->stored_samps = (long *)sysmem_newptrclear(MAXSTORE * sizeof(long));
-		x->stored_increments = (float *)sysmem_newptrclear(MAXSTORE * sizeof(float));
+		x->stored_starts = calloc(MAXSTORE, sizeof(int));
+		x->stored_samps = calloc(MAXSTORE, sizeof(int));
+		x->stored_increments = calloc(MAXSTORE, sizeof(int));
 		chopper_set(x, x->wavename);
 		
 	} else {
@@ -619,9 +615,10 @@ void chopper_init(t_chopper *x, short initialized)
 void chopper_free(t_chopper *x)
 {
 	dsp_free((t_pxobject *) x);
-	sysmem_freeptr(x->stored_increments);
-	sysmem_freeptr(x->stored_samps);
-	sysmem_freeptr(x->stored_starts);
+    
+	free(x->stored_increments);
+	free(x->stored_samps);
+	free(x->stored_starts);
 }
 
 void chopper_jitterme(t_chopper *x)
@@ -672,7 +669,7 @@ void chopper_rincme(t_chopper *x )
 {
 	float new_inc = 0;
 	//  int count = 0;
-	long new_samps;
+	int new_samps;
 	float rinc_factor = x->rinc_factor;
 	
 	/* test generate a new increment */
@@ -718,10 +715,10 @@ void chopper_randloop( t_chopper *x )
     long framesize = buffer_getframecount(buffer);
 	// int framesize = x->the_buffer->b_frames;
 	float segdur = x->segdur;
-	long loop_start = x->loop_start;
-	long loop_samps = x->loop_samps;
-	long transp_loop_samps = x->transp_loop_samps;
-	long samps_to_go = x->samps_to_go;
+	int loop_start = x->loop_start;
+	int loop_samps = x->loop_samps;
+	int transp_loop_samps = x->transp_loop_samps;
+	int samps_to_go = x->samps_to_go;
 	float increment = x->increment;
 	float minincr = x->minincr;
 	float maxincr = x->maxincr;
@@ -781,7 +778,7 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
                                  long numins, double **outs,long numouts, long n,
                                  long flags, void *userparam)
 {
-	long bindex, bindex2;
+	int bindex, bindex2;
 	int i,k;
 	float sample, frac;
 	float tmp1, tmp2;
@@ -793,55 +790,50 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
 	long nc;
 	
 	float segdur = x->segdur;
-	long taper_samps = x->taper_samps ;
+	int taper_samps = x->taper_samps ;
 	float taper_duration = x->taper_duration;
 	float minseg = x->minseg;
 	float maxseg = x->maxseg;
 	int lock_loop = x->lock_loop;
-	long force_new_loop = x->force_new_loop;
+	int force_new_loop = x->force_new_loop;
 	short initialize_loop = x->initialize_loop;
 	float fade_level = x->fade_level;
 	short preempt = x->preempt;
-	long preempt_count = x->preempt_count;
-	long preempt_samps = x->preempt_samps;
+	
+	int preempt_count = x->preempt_count;
+	int preempt_samps = x->preempt_samps;
 	short recalling_loop = x->recalling_loop;
 	float preempt_gain = 1.0;
+	
 	float jitter_factor = x->jitter_factor;
 	float rdur_factor = x->rdur_factor;
 	float rinc_factor = x->rinc_factor;
 	float fbindex = x->fbindex;
 	float increment = x->increment;
-	long transp_loop_samps = x->transp_loop_samps;
-	long loop_start = x->loop_start;
-	long loop_samps = x->loop_samps;
-	long samps_to_go = x->samps_to_go;
+	int transp_loop_samps = x->transp_loop_samps;
+	int loop_start = x->loop_start;
+	int loop_samps = x->loop_samps;
+	int samps_to_go = x->samps_to_go;
 	float loop_gain = x->loop_gain;
 	long active_outlets;
 	t_buffer_obj *the_buffer;
     
-
-    /*
+	// quick bail on bad buffer!
+ //   chopper_attach_buffer(x); // NOTE - absence of this line could be causing a fail in Ableton
     the_buffer = buffer_ref_getobject(x->buffer_ref);
     if ( the_buffer == NULL){
+        if(!x->already_failed){
+            x->already_failed = 1;
+            object_post((t_object *)x, "\"%s\" is an invalid buffer", x->wavename->s_name);
+        }
         goto zero;
     }
-    
 	tab = buffer_locksamples(the_buffer);
 	if (!tab){
         goto zero;
     }
-
-    */
-    
-    the_buffer = buffer_ref_getobject(x->buffer_ref);
-    tab = buffer_locksamples(the_buffer);
-    if(!tab){
-        goto zero;
-    }
-    
     frames = buffer_getframecount(the_buffer);
    // post("framecount %d\n", frames);
-
     if( frames <= 0){
         if(!x->already_failed){
             x->already_failed = 1;
@@ -849,8 +841,11 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
         }
         goto zero;
     }
-
     nc = buffer_getchannelcount(the_buffer);
+    // now OWN the buffer, freeing it at the end of this job
+
+    
+    
     
     // is buffer zero sized or do its channels not match output channels? DIE!!!!
 	if(x->outlet_count != nc){
@@ -859,18 +854,15 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
             object_post((t_object *)x, "mismatch between buffer \"%s\" which has %d channels and the chopper~ which requires %d channels",
                         x->wavename->s_name, nc, x->outlet_count);
         }
-        //buffer_perform_end(the_buffer);
-        // buffer_unlocksamples(the_buffer);
-        goto zero;
+        buffer_perform_end(the_buffer);
+        return;
     }
     if(frames == 0){
         if(!x->already_failed){
             x->already_failed = 1;
             object_post((t_object *)x, "\"%s\" is an empty buffer", x->wavename->s_name);
         }
-        // buffer_perform_end(the_buffer);
-        // buffer_unlocksamples(the_buffer);
-        goto zero;
+        buffer_perform_end(the_buffer);
         return;
     }
     
@@ -1266,7 +1258,6 @@ void chopper_perform_universal64(t_chopper *x, t_object *dsp64, double **ins,
     buffer_unlocksamples(the_buffer);
     return;
 zero:
-//    buffer_unlocksamples(the_buffer);
     for(k = 0; k < n; k++) {
         for(i = 0; i < numouts; i++){
             outs[i][k] = 0.0;
