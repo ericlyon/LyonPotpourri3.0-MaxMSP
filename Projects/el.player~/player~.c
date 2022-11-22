@@ -1,4 +1,4 @@
-#include "MSPd.h"
+#include "../include/MSPd.h"
 
 static t_class *player_class;
 
@@ -15,7 +15,7 @@ static t_class *player_class;
 
 #define OBJECT_NAME "player~"
 
-// lame MSP buffer limitation, will hopefully increase soon
+// updated with notify function enabled (Nov. 2022)
 #define MAX_OUTLETS (4)
 
 typedef struct
@@ -103,7 +103,7 @@ int C74_EXPORT main(void)
 	class_addmethod(c,(method)player_mute,"mute", A_FLOAT, 0);
 	class_addmethod(c,(method)player_paranoia,"paranoia", A_FLOAT, 0);
 	class_addmethod(c,(method)player_float,"float", A_FLOAT, 0);
-	
+    class_addmethod(c,(method)player_notify,"notify", A_CANT, 0);
 	CLASS_ATTR_LONG(c, "static_increment", 0, t_player, static_increment);
 	CLASS_ATTR_DEFAULT_SAVE(c, "static_increment", 0, "20");
 	CLASS_ATTR_ENUMINDEX(c,"static_increment", 0, "Off On");
@@ -588,8 +588,7 @@ void player_dsp_free(t_player *x)
 	free(x->events);
 }
 
-void
-(t_player *x, t_object *dsp64, short *count, double sr, long n, long flags)
+void player_dsp64(t_player *x, t_object *dsp64, short *count, double sr, long n, long flags)
 {
     /*
     //   post("64 bit version of player~");
