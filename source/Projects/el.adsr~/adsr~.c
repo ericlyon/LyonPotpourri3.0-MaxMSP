@@ -89,31 +89,31 @@ int C74_EXPORT main(void)
     class_addmethod(c, (method)adsr_dsp64, "dsp64", A_CANT,0);
 
 		
-	CLASS_ATTR_FLOAT(c, "attack", 0, t_adsr, a);
+	CLASS_ATTR_DOUBLE(c, "attack", 0, t_adsr, a);
 	CLASS_ATTR_DEFAULT_SAVE(c, "attack", 0, "20");
 	CLASS_ATTR_ACCESSORS(c, "attack", (method)adsr_a_get, (method)adsr_a_set);
 	CLASS_ATTR_LABEL(c, "attack", 0, "Attack Time");
 
-	CLASS_ATTR_FLOAT(c, "decay", 0, t_adsr, d);
+	CLASS_ATTR_DOUBLE(c, "decay", 0, t_adsr, d);
 	CLASS_ATTR_DEFAULT_SAVE(c, "decay", 0, "50");
 	CLASS_ATTR_ACCESSORS(c, "decay", (method)adsr_d_get, (method)adsr_d_set);
 	CLASS_ATTR_LABEL(c, "decay", 0, "Decay Time");
 	
-	CLASS_ATTR_FLOAT(c, "sustain", 0, t_adsr, s); 
+	CLASS_ATTR_DOUBLE(c, "sustain", 0, t_adsr, s); 
 	CLASS_ATTR_DEFAULT_SAVE(c, "sustain", 0, "150");
 	CLASS_ATTR_ACCESSORS(c, "sustain", (method)adsr_s_get, (method)adsr_s_set);
 	CLASS_ATTR_LABEL(c, "sustain", 0, "Sustain Time");
 	
-	CLASS_ATTR_FLOAT(c, "release", 0, t_adsr, r);
+	CLASS_ATTR_DOUBLE(c, "release", 0, t_adsr, r);
 	CLASS_ATTR_DEFAULT_SAVE(c, "release", 0, "200");
 	CLASS_ATTR_ACCESSORS(c, "release", (method)adsr_r_get, (method)adsr_r_set);
 	CLASS_ATTR_LABEL(c, "release", 0, "Release Time");
 
-	CLASS_ATTR_FLOAT(c, "gain1", 0, t_adsr, egain1);
+	CLASS_ATTR_DOUBLE(c, "gain1", 0, t_adsr, egain1);
 	CLASS_ATTR_DEFAULT_SAVE(c, "gain1", 0, "1.0");
 	CLASS_ATTR_LABEL(c, "gain1", 0, "Gain 1");
 	
-	CLASS_ATTR_FLOAT(c, "gain2", 0, t_adsr, egain2);
+	CLASS_ATTR_DOUBLE(c, "gain2", 0, t_adsr, egain2);
 	CLASS_ATTR_DEFAULT_SAVE(c, "gain2", 0, "0.7");
 	CLASS_ATTR_LABEL(c, "gain2", 0, "Gain 2");
 

@@ -1,4 +1,5 @@
 #include "MSPd.h"
+#include <stdlib.h>
 
 #define OBJECT_NAME "buffi~"
 
@@ -66,7 +67,7 @@ void *buffi_new(t_symbol *msg, short argc, t_atom *argv)
     atom_arg_getsym(&x->src2,1,argc,argv);
     atom_arg_getsym(&x->dest,2,argc,argv);
     buffi_set(x, msg);
-    srandom(clock());
+    srand(clock());
     return x;
 }
 

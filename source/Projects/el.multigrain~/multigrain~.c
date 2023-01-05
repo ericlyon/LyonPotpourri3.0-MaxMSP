@@ -1,4 +1,5 @@
 #include "MSPd.h"
+#include <stdlib.h>
 
 #define MAXGRAINS (512) // just for present to get lower overhead
 
@@ -396,7 +397,7 @@ void multigrain_pitchspray(t_multigrain *x)
     			grains[j].ephase = 0.0;
     			grains[j].amplitude = multigrain_boundrand(minamp, maxamp);
     			grains[j].amplitude *= .707;//used directly only for "nopan"
-                grains[j].output_channel = random() % x->output_channels;
+                grains[j].output_channel = rand() % x->output_channels;
     			
 				if(constrain_scale){
 					multigrain_constrain(&index_min,&index_max,min_incr, max_incr, scale, steps);
@@ -525,10 +526,10 @@ void multigrain_spray(t_multigrain *x)
                 
                 
                 if(groupflag == 1){
-                    dex = random() % changroup_length;
+                    dex = rand() % changroup_length;
                     grains[j].output_channel = changroup[dex];
                 } else {
-                    grains[j].output_channel = minchanr + (random() % (maxchanr - minchanr));
+                    grains[j].output_channel = minchanr + (rand() % (maxchanr - minchanr));
                 }
 				grainframes = grains[j].duration * grains[j].si;//frames to be read from buffer
 				grains[j].esi =  (float) eframes / (float) grains[j].duration;

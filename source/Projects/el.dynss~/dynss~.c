@@ -1,4 +1,5 @@
 #include "MSPd.h"
+#include <stdlib.h>
 
 static t_class *dynss_class;
 
@@ -152,7 +153,7 @@ void *dynss_new(t_symbol *msg, short argc, t_atom *argv)
 	}
 	x->freq = 100.0;
 	
-	srandom(time(0));
+	srand(time(0));
 
 	dynss_init(x,0); 
 	

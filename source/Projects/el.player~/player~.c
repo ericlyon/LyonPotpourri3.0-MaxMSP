@@ -52,7 +52,7 @@ typedef struct _player
     short connections[4];// state of signal connections
     short interpolation_tog;// select for interpolation or not
     short mute;
-    short static_increment; // flag to use static increment (off by default)
+    char static_increment; // flag to use static increment (off by default)
     /* variables only for Pd */
     int vs;//signal vector size
     float *trigger_vec;//copy of input vector (Pd only)
@@ -104,7 +104,7 @@ int C74_EXPORT main(void)
 	class_addmethod(c,(method)player_paranoia,"paranoia", A_FLOAT, 0);
 	class_addmethod(c,(method)player_float,"float", A_FLOAT, 0);
     class_addmethod(c,(method)player_notify,"notify", A_CANT, 0);
-	CLASS_ATTR_LONG(c, "static_increment", 0, t_player, static_increment);
+	CLASS_ATTR_CHAR(c, "static_increment", 0, t_player, static_increment);
 	CLASS_ATTR_DEFAULT_SAVE(c, "static_increment", 0, "20");
 	CLASS_ATTR_ENUMINDEX(c,"static_increment", 0, "Off On");
 	CLASS_ATTR_LABEL(c, "static_increment", 0, "Static Increment");
@@ -303,7 +303,7 @@ void player_perform64(t_player *x, t_object *dsp64, double **ins,
 	int i,j,k, chan;
 	short *connections = x->connections;
 	short bail;
-	short static_increment = x->static_increment;
+	char static_increment = x->static_increment;
 	float maxphase;
 	float frac, fphase;
 	int theft_candidate;
