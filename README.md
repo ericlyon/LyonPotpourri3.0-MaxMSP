@@ -54,7 +54,7 @@ LyonPotpourri is Copyright Eric Lyon, 1999-2023, and is covered under the MIT li
 - splitbank~ - split an incoming sound into complementary, independently tunable spectra
 - splitspec~ split an incoming sound into complementary spectra
 - squash~ implementation of a compression algorithm by Christopher Penrose
-- stutter~ stuttering playback from an array
+- stutter~ stuttering playback from a buffer
 - vdb~ a delay line using an array for storage (no vector limit on feedback delaytime)
 - vdp~ a simple, self-contained delay unit
 - vecdex~ outputs the sample index within the current signal vector
