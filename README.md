@@ -10,6 +10,7 @@ LyonPotpourri is Copyright Eric Lyon, 1999-2023, and is covered under the MIT li
 - arrayfilt~ fft-based filtering by drawing into an array
 - bashfest~ a click driven buffer player with randomized DSP
 - buffet~ provides operations on a stored buffer
+- buffi~ interpolates between the contents of two buffers
 - bvplay~ selective playback from a stored buffer with enveloping and increment control
 - cartopol~ convert a spectral frame from cartesian to polar form
 - chameleon~ an oracular sound processor
