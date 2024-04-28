@@ -83,6 +83,8 @@ void chameleon_report(t_chameleon *x);
 void chameleon_perform64(t_chameleon *x, t_object *dsp64, double **ins,
                          long numins, double **outs,long numouts, long vectorsize,
                          long flags, void *userparam);
+void chameleon_tweak_parameters(t_chameleon *x, t_floatarg t);
+void clip(double *x, double min, double max);
 
 int C74_EXPORT main(void)
 {
@@ -99,6 +101,7 @@ int C74_EXPORT main(void)
     class_addmethod(c,(method)chameleon_setodds,"setodds", A_GIMME, 0);
     class_addmethod(c,(method)chameleon_loadslot,"loadslot", A_GIMME, 0);
     class_addmethod(c,(method)chameleon_set_parameters,"set_parameters", 0);
+    class_addmethod(c,(method)chameleon_tweak_parameters,"tweak_parameters", A_FLOAT, 0);
     class_addmethod(c,(method)chameleon_maximum_process,"maximum_process", A_FLOAT, 0);
     class_addmethod(c,(method)chameleon_minimum_process,"minimum_process", A_FLOAT, 0);
     class_addmethod(c,(method)chameleon_print_parameters,"print_parameters", 0);
@@ -111,6 +114,13 @@ int C74_EXPORT main(void)
     return 0;
 }
 
+void clip(double *x, double min, double max){
+    if(*x < min){
+        *x = min;
+    } else if (*x > max){
+        *x = max;
+    }
+}
 
 void chameleon_print_parameters(t_chameleon *x){
     int i;
@@ -804,6 +814,475 @@ panic:
 
 void chameleon_set_parameters(t_chameleon *x){
     x->set_parameters_flag = 1;
+}
+
+void chameleon_tweak_parameters(t_chameleon *x, t_floatarg tdev){
+    int i, j;
+    int ftype;
+    double cf, bw;//, bw;
+    double delay, revtime;
+    double *params = x->params;
+    long pcount = x->pcount;
+    int comb_dl_count = 0; // where in the comb pool to grab memory
+    int flange_count = 0;
+    int truncate_count = 0;
+    int butterworth_count = 0;
+    int sweepreson_count = 0;
+    int slidecomb_count = 0;
+    int reverb1_count = 0;
+    int ellipseme_count = 0;
+    int feed1_count = 0;
+    int flam1_count = 0;
+    int comb4_count = 0;
+    int ringfeed_count = 0;
+    int bendy_count = 0;
+    int ringmod_count = 0;
+    int ringmod4_count = 0;
+    int slideflam_count = 0;
+    int bitcrush_count = 0;
+    int resonadsr_count = 0;
+    int stv_count = 0;
+    double raw_wet;
+    double sr = x->sr;
+    double *dels;
+    double **alpo1, **alpo2;
+    double speed1, speed2, mindelay, maxdelay, duration;
+    double basefreq;
+    double rvt = boundrand(0.1,0.98);
+    double lpt;
+    double notedur, sust;
+    double phz1, phz2, minfeedback = 0.1, maxfeedback = 0.7;
+    long slotnum = x->recall_slot;
+    double *rparams; // parameter set to recall
+    long rpcount; // number of parameters to read
+    long slot_pcount;
+    double multmin, multmax, tmp;
+    
+    clip(&tdev, 0.001, 0.5);
+    multmin = 1.0 - tdev;
+    multmax = 1.0 + tdev;
+    /* Now iterate through the recall, but with no setting of memory */
+    slot_pcount = x->slots[slotnum].pcount;
+    
+    if( slot_pcount <= 0){
+        //    post("Aborting reload of slot %d", slotnum);
+        return;
+    }
+    rparams = x->slots[slotnum].params;
+    pcount = 0;
+    rpcount = 0;
+
+    while( rpcount < slot_pcount ){
+        j = rparams[rpcount++];
+        if(j == COMB){
+            params[pcount++] = COMB;
+            delay = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&delay, 0.01, 0.35);
+            params[pcount++] = delay;
+            revtime = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&revtime,0.5,0.98);
+            params[pcount++] = revtime;
+            params[pcount++] = comb_dl_count = rparams[rpcount++]; // Possible Bug Here???
+            mycombset(delay,revtime,0,x->comb_delay_pool1[comb_dl_count],x->sr);
+            mycombset(delay,revtime,0,x->comb_delay_pool2[comb_dl_count],x->sr);
+        }
+        else if(j == RINGMOD) {
+            // post("Added RINGMOD unit");
+            params[pcount++] = RINGMOD;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 40.0, 3000.0 );
+            params[pcount++] = tmp;
+            params[pcount++] = ringmod_count = rparams[rpcount++];
+        }
+        else if(j == RINGMOD4) {
+            // post("Added RINGMOD4 unit");
+            params[pcount++] = RINGMOD4;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 40.0, 3000.0 );
+            params[pcount++] = tmp;
+            params[pcount++] = ringmod4_count = rparams[rpcount++];
+        }
+        else if(j == BENDY){
+            params[pcount++] = BENDY;
+            params[pcount++] = bendy_count = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.01, BENDY_MAXDEL);
+            params[pcount++] = x->bendy_units[bendy_count].val1 = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.01, BENDY_MAXDEL);
+            params[pcount++] = x->bendy_units[bendy_count].val2 = tmp;
+            // danger here
+            x->bendy_units[bendy_count].counter = 0;
+            delset2(x->bendy_units[bendy_count].delayline1, x->bendy_units[bendy_count].dv1, x->bendy_units[bendy_count].val1,x->sr);
+            delset2(x->bendy_units[bendy_count].delayline2, x->bendy_units[bendy_count].dv2, x->bendy_units[bendy_count].val2,x->sr);
+        }
+        else if(j == FLANGE){
+            params[pcount++] = FLANGE;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 80.0, 400.0);
+            params[pcount++] = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 600.0, 4000.0);
+            params[pcount++] = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.1, 2.0);
+            params[pcount++] = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.1, 0.95);
+            params[pcount++] = tmp;
+            params[pcount++] = flange_count = rparams[rpcount++];
+        }
+        else if(j == BUTTER){
+            /*
+             params[pcount++] = cf = boundrand(70.0,3000.0);
+             params[pcount++] = bw = cf * boundrand(0.05,0.6);
+             */
+            params[pcount++] = BUTTER;
+            params[pcount++] = ftype = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 70.0, 3000.0);
+            params[pcount++] = cf = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.05, 0.6);
+            params[pcount++] = bw = tmp;
+            params[pcount++] = butterworth_count = rparams[rpcount++];
+            if( ftype == LOPASS) {
+                lobut(x->butterworth_units[butterworth_count].data1, cf, sr);
+                lobut(x->butterworth_units[butterworth_count].data2, cf, sr);
+            } else if (ftype == HIPASS){
+                hibut(x->butterworth_units[butterworth_count].data1, cf, sr);
+                hibut(x->butterworth_units[butterworth_count].data2, cf, sr);
+            }
+            else if(ftype == BANDPASS){
+                bpbut(x->butterworth_units[butterworth_count].data1, cf, bw, sr);
+                bpbut(x->butterworth_units[butterworth_count].data2, cf, bw, sr);
+                x->butterworth_units[butterworth_count].bw = bw;
+            }
+            x->butterworth_units[butterworth_count].cf = cf;
+            x->butterworth_units[butterworth_count].ftype = ftype;
+        }
+        else if(j == TRUNCATE){
+            // nothing to change here
+            params[pcount++] = TRUNCATE;
+            params[pcount++] = truncate_count = rparams[rpcount++];
+            /*
+            x->truncate_units[truncate_count].counter = 0;
+            x->truncate_units[truncate_count].state = 0;
+            x->truncate_units[truncate_count].segsamples = 1;
+            */
+        }
+        else if(j == SWEEPRESON){
+            params[pcount++] = SWEEPRESON;
+            params[pcount++] = sweepreson_count = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 100.0, 300.0);
+            params[pcount++] = x->sweepreson_units[sweepreson_count].minfreq = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 600.0, 6000.0);
+            params[pcount++] = x->sweepreson_units[sweepreson_count].maxfreq = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.01, 0.2);
+            params[pcount++] = x->sweepreson_units[sweepreson_count].bwfac = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.05, 2.0);
+            params[pcount++] = x->sweepreson_units[sweepreson_count].speed = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.0, 0.5);
+            params[pcount++] = x->sweepreson_units[sweepreson_count].phase = tmp;
+            x->sweepreson_units[sweepreson_count].q1[3] = 0;
+            x->sweepreson_units[sweepreson_count].q1[4] = 0;
+            x->sweepreson_units[sweepreson_count].q2[3] = 0;
+            x->sweepreson_units[sweepreson_count].q2[4] = 0;
+        }
+        else if(j == SLIDECOMB){
+            params[pcount++] = SLIDECOMB;
+            params[pcount++] = slidecomb_count = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.001,MAX_SLIDECOMB_DELAY * 0.95);
+            params[pcount++] = x->slidecomb_units[slidecomb_count].start_delay = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.001,MAX_SLIDECOMB_DELAY * 0.95);
+            params[pcount++] = x->slidecomb_units[slidecomb_count].end_delay = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.7,0.99);
+            params[pcount++] = x->slidecomb_units[slidecomb_count].feedback = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.1,2.0);
+            params[pcount++] = x->slidecomb_units[slidecomb_count].sample_length = tmp;
+            // scale length to SR
+            x->slidecomb_units[slidecomb_count].sample_length *= x->sr;
+            x->slidecomb_units[slidecomb_count].counter = 0;
+            delset2(x->slidecomb_units[slidecomb_count].delayline1,x->slidecomb_units[slidecomb_count].dv1,MAX_SLIDECOMB_DELAY, x->sr);
+            delset2(x->slidecomb_units[slidecomb_count].delayline2,x->slidecomb_units[slidecomb_count].dv2,MAX_SLIDECOMB_DELAY, x->sr);
+        }
+        else if(j == REVERB1){
+            params[pcount++] = REVERB1;
+            params[pcount++] = reverb1_count = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.25,0.99);
+            params[pcount++] = revtime = x->reverb1_units[reverb1_count].revtime = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.2,0.8);
+            params[pcount++] = raw_wet = tmp;
+            x->reverb1_units[reverb1_count].wet = sin(1.570796 * raw_wet);
+            x->reverb1_units[reverb1_count].dry = cos(1.570796 * raw_wet);
+            dels = x->reverb1_units[reverb1_count].dels;
+            for(i = 0; i < 4; i++){
+                tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+                clip(&tmp, 0.005, 0.1);
+                params[pcount++] = dels[i] = tmp;
+            }
+            alpo1 = x->reverb1_units[reverb1_count].alpo1;
+            alpo2 = x->reverb1_units[reverb1_count].alpo2;
+            for( i = 0; i < 4; i++ ){
+                if(dels[i] < .005 || dels[i] > 0.1) {
+                    post("reverb1: bad random delay time: %f",dels[i]);
+                    dels[i] = .05;
+                }
+                // could be dangerous!
+                mycombset(dels[i], revtime, 0, alpo1[i], x->sr);
+                mycombset(dels[i], revtime, 0, alpo2[i], x->sr);
+            }
+            /*
+            ellipset(x->reverb_ellipse_data,x->reverb1_units[reverb1_count].eel1,&x->reverb1_units[reverb1_count].nsects,&x->reverb1_units[reverb1_count].xnorm);
+            ellipset(x->reverb_ellipse_data,x->reverb1_units[reverb1_count].eel2,&x->reverb1_units[reverb1_count].nsects,&x->reverb1_units[reverb1_count].xnorm);
+            */
+            //  reverb1_count = (reverb1_count + 1) % max_dsp_units;
+        }
+        else if(j == ELLIPSE){
+           // nothing to change here
+            params[pcount++] = ELLIPSE;
+            params[pcount++] = ellipseme_count = rparams[rpcount++];
+            params[pcount++] = x->ellipseme_units[ellipseme_count].filtercode = rparams[rpcount++];
+            
+            if( x->ellipseme_units[ellipseme_count].filtercode >= ELLIPSE_FILTER_COUNT ){
+                error("there is no %d ellipse data",x->ellipseme_units[ellipseme_count].filtercode);
+                return;
+            };
+            /*
+            fltdata = x->ellipse_data [x->ellipseme_units[ellipseme_count].filtercode];
+            eel1 = x->ellipseme_units[ellipseme_count].eel1;
+            eel2 = x->ellipseme_units[ellipseme_count].eel2;
+            ellipset(fltdata,eel1,&nsects,&xnorm);
+            ellipset(fltdata,eel2,&nsects,&xnorm);
+            x->ellipseme_units[ellipseme_count].nsects = nsects;
+            x->ellipseme_units[ellipseme_count].xnorm = xnorm;
+            */
+            // ellipseme_count = (ellipseme_count + 1) % max_dsp_units;
+        }
+        else if(j == FEED1){
+            params[pcount++] = FEED1;
+            params[pcount++] = feed1_count = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.001, 0.1);
+            params[pcount++] = mindelay = x->feed1_units[feed1_count].mindelay = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, mindelay, 0.1);
+            params[pcount++] = maxdelay = x->feed1_units[feed1_count].maxdelay = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.01, 0.5);
+            params[pcount++] = speed1 = x->feed1_units[feed1_count].speed1 = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, speed1, 0.5);
+            params[pcount++] = speed2 = x->feed1_units[feed1_count].speed2 = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.05, 1.0);
+            params[pcount++] = duration = x->feed1_units[feed1_count].duration = tmp;
+            
+            funcgen1(x->feed1_units[feed1_count].func1, FEEDFUNCLEN,duration,
+                     mindelay,maxdelay, speed1, speed2, 1.0, 1.0,&phz1, &phz2, x->sinewave, x->sinelen);
+            phz1 /= (double) FEEDFUNCLEN; phz2 /= (double) FEEDFUNCLEN;
+            funcgen1(x->feed1_units[feed1_count].func2, FEEDFUNCLEN,duration,
+                     mindelay * 0.5,maxdelay * 2.0, speed1 * 1.25, speed2 * 0.75, 1.0, 1.0,&phz1, &phz2, x->sinewave, x->sinelen);
+            phz1 /= (double) FEEDFUNCLEN; phz2 /= (double) FEEDFUNCLEN;
+            funcgen1(x->feed1_units[feed1_count].func3, FEEDFUNCLEN,duration,
+                     minfeedback, maxfeedback, speed1*.35, speed2*1.25, 1.0, 1.0,&phz1, &phz2, x->sinewave, x->sinelen);
+            phz1 /= (double) FEEDFUNCLEN; phz2 /= (double) FEEDFUNCLEN;
+            funcgen1(x->feed1_units[feed1_count].func4, FEEDFUNCLEN,duration,
+                     minfeedback, maxfeedback, speed1*.55, speed2*2.25, 1.0, 1.0,&phz1, &phz2, x->sinewave, x->sinelen);
+            /*
+            delset2(x->feed1_units[feed1_count].delayLine1a, x->feed1_units[feed1_count].dv1a, MAX_MINI_DELAY, x->sr);
+            delset2(x->feed1_units[feed1_count].delayLine2a, x->feed1_units[feed1_count].dv2a, MAX_MINI_DELAY, x->sr);
+            delset2(x->feed1_units[feed1_count].delayLine1b, x->feed1_units[feed1_count].dv1b, MAX_MINI_DELAY, x->sr);
+            delset2(x->feed1_units[feed1_count].delayLine2b, x->feed1_units[feed1_count].dv2b, MAX_MINI_DELAY, x->sr);
+            */
+            // feed1_count = (feed1_count + 1) % max_dsp_units;
+            
+        }
+        else if(j == BITCRUSH){
+            params[pcount++] = BITCRUSH;
+            params[pcount++] = bitcrush_count = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 2.0, 8.0);
+            params[pcount++] = x->bitcrush_factors[bitcrush_count] = tmp;
+            // bitcrush_count = (bitcrush_count + 1) % max_dsp_units;
+        }
+        else if(j == FLAM1){
+            params[pcount++] = FLAM1;
+            params[pcount++] = flam1_count = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax); // not yet scaled to SR
+            clip(&tmp, 1.0, 4.0);
+            params[pcount++] = x->flam1_units[flam1_count].sample_length = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.08, 0.2);
+            params[pcount++] = x->flam1_units[flam1_count].dt = tmp;
+            
+            x->flam1_units[flam1_count].counter = 0;
+            // scale to SR
+            x->flam1_units[flam1_count].sample_length *= x->sr;
+            delset2(x->flam1_units[flam1_count].delayline1, x->flam1_units[flam1_count].dv1, MAX_MINI_DELAY, x->sr);
+            delset2(x->flam1_units[flam1_count].delayline2, x->flam1_units[flam1_count].dv2, MAX_MINI_DELAY, x->sr);
+        }
+        else if(j == SLIDEFLAM){
+            double sf_del1, sf_del2;
+            params[pcount++] = SLIDEFLAM;
+            params[pcount++] = slideflam_count = rparams[rpcount++];
+            sf_del1 = rparams[rpcount++] * boundrand(multmin, multmax);
+            sf_del2 = rparams[rpcount++] * boundrand(multmin, multmax);
+            if( sf_del2 > sf_del1 ){
+                clip(&sf_del1, 0.01, 0.05);
+                clip(&sf_del2, 0.1,MAX_SLIDEFLAM_DELAY * 0.95);
+            } else {
+                clip(&sf_del2, 0.01, 0.05);
+                clip(&sf_del1, 0.1,MAX_SLIDEFLAM_DELAY * 0.95);
+            }
+            params[pcount++] = x->slideflam_units[slideflam_count].dt1 = sf_del1;
+            params[pcount++] = x->slideflam_units[slideflam_count].dt2 = sf_del2;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.7, 0.99);
+            params[pcount++] = x->slideflam_units[slideflam_count].feedback = tmp;
+            params[pcount++] = x->slideflam_units[slideflam_count].sample_length = rparams[rpcount++] * boundrand(multmin, multmax); // not yet scaled to SR
+            
+            x->slideflam_units[slideflam_count].counter = 0;
+            // scale to SR
+            x->slideflam_units[slideflam_count].sample_length *= x->sr;
+            delset2(x->slideflam_units[slideflam_count].delayline1,x->slideflam_units[slideflam_count].dv1,MAX_SLIDEFLAM_DELAY, x->sr);
+            delset2(x->slideflam_units[slideflam_count].delayline2,x->slideflam_units[slideflam_count].dv2,MAX_SLIDEFLAM_DELAY, x->sr);
+        }
+        else if(j == COMB4){
+            params[pcount++] = COMB4;
+            params[pcount++] = comb4_count = rparams[rpcount++];
+            rvt = 0.99;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 100.0,400.0);
+            params[pcount++] = basefreq = tmp;
+            // post("comb4: count: %d, basefreq: %f",comb4_count, basefreq);
+            for( i = 0; i < 4; i++ ){
+                tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+                clip(&tmp, 0.0001,0.05);
+                params[pcount++] = lpt = tmp;
+                // dangerous ?
+                mycombset(lpt, rvt, 0, x->comb4_units[comb4_count].combs1[i], x->sr);
+                mycombset(lpt, rvt, 0, x->comb4_units[comb4_count].combs2[i], x->sr);
+            }
+        }
+        else if(j == COMPDIST){
+            /* nothing to change */
+            params[pcount++] = COMPDIST;
+        }
+        else if(j == RINGFEED){
+            params[pcount++] = RINGFEED;
+            params[pcount++] = ringfeed_count = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 90.0, 1500.0);
+            params[pcount++] = cf = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.02 * cf, 0.4 * cf);
+            params[pcount++] = bw = tmp;
+            
+            rsnset2(cf, bw, RESON_NO_SCL, 0., x->resonfeed_units[ringfeed_count].res1q, x->sr);
+            rsnset2(cf, bw, RESON_NO_SCL, 0., x->resonfeed_units[ringfeed_count].res2q, x->sr);
+            x->resonfeed_units[ringfeed_count].osc1phs = 0.0;
+            x->resonfeed_units[ringfeed_count].osc2phs = 0.0;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 90.0, 1500.0);
+            params[pcount++] = x->resonfeed_units[ringfeed_count].osc1si = tmp; // not yet scaled to SR
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 90.0, 1500.0);
+            params[pcount++] = x->resonfeed_units[ringfeed_count].osc2si = tmp; // not yet scaled to SR
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 1.0/1500.0, 1.0/90.0);
+            params[pcount++] = lpt = tmp;
+            tmp = rparams[rpcount++];
+            clip(&tmp, 0.01, 0.8);
+            params[pcount++] = rvt = tmp;
+            // scale to SR
+            x->resonfeed_units[ringfeed_count].osc1si *= ((double)x->sinelen / x->sr);
+            x->resonfeed_units[ringfeed_count].osc2si *= ((double)x->sinelen / x->sr);
+            // dangerous ?
+            mycombset(lpt, rvt, 0, x->resonfeed_units[ringfeed_count].comb1arr, x->sr);
+            mycombset(lpt, rvt, 0, x->resonfeed_units[ringfeed_count].comb2arr, x->sr);
+
+        }
+        else if(j == RESONADSR){
+            params[pcount++] = RESONADSR;
+            params[pcount++] = resonadsr_count = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.01, 0.1);
+            params[pcount++] = x->resonadsr_units[resonadsr_count].adsr->a = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.01, 0.05);
+            params[pcount++] = x->resonadsr_units[resonadsr_count].adsr->d = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.05, 0.5);
+            params[pcount++] = x->resonadsr_units[resonadsr_count].adsr->r = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 150.0, 4000.0);
+            params[pcount++] = x->resonadsr_units[resonadsr_count].adsr->v1 = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 150.0, 4000.0);
+            params[pcount++] = x->resonadsr_units[resonadsr_count].adsr->v2 = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 150.0, 4000.0);
+            params[pcount++] = x->resonadsr_units[resonadsr_count].adsr->v3 = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 150.0, 4000.0);
+            params[pcount++] = x->resonadsr_units[resonadsr_count].adsr->v4 = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.03,0.7);
+            params[pcount++] = x->resonadsr_units[resonadsr_count].bwfac = tmp;
+            tmp =  rparams[rpcount++] * boundrand(multmin, multmax);
+            params[pcount++] =  notedur = tmp;
+            clip(&tmp, 0.7,1.2);
+            x->resonadsr_units[resonadsr_count].phs = 0.0;
+            sust = notedur - (x->resonadsr_units[resonadsr_count].adsr->a + x->resonadsr_units[resonadsr_count].adsr->d +  x->resonadsr_units[resonadsr_count].adsr->r);
+            x->resonadsr_units[resonadsr_count].adsr->s = sust;
+            buildadsr(x->resonadsr_units[resonadsr_count].adsr);
+            x->resonadsr_units[resonadsr_count].si = ((double)x->resonadsr_units[resonadsr_count].adsr->len / x->sr) / notedur;
+            // resonadsr_count = (resonadsr_count + 1) % max_dsp_units;
+        }
+        else if(j == STV){
+
+            params[pcount++] = STV;
+            params[pcount++] = stv_count = rparams[rpcount++];
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.025,0.5);
+            params[pcount++] = speed1 = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.025,0.5);
+            params[pcount++] = speed2 = tmp;
+            tmp = rparams[rpcount++] * boundrand(multmin, multmax);
+            clip(&tmp, 0.001,0.01);
+            params[pcount++] = maxdelay = tmp;
+            
+            x->stv_units[stv_count].osc1phs = 0.0;
+            x->stv_units[stv_count].osc2phs = 0.0;
+            x->stv_units[stv_count].fac2 = 0.5 * (maxdelay - 0.001);
+            x->stv_units[stv_count].fac1 = 0.001 + x->stv_units[stv_count].fac2;
+            x->stv_units[stv_count].osc1si = ((double)x->sinelen / x->sr) * speed1;
+            x->stv_units[stv_count].osc2si = ((double)x->sinelen / x->sr) * speed2;
+            delset2(x->stv_units[stv_count].delayline1, x->stv_units[stv_count].dv1, maxdelay, x->sr);
+            delset2(x->stv_units[stv_count].delayline2, x->stv_units[stv_count].dv2, maxdelay, x->sr);
+            // stv_count = (stv_count + 1) % max_dsp_units;
+        }
+        else {
+            error("el.chameleon~: could not find a process for %d",j);
+        }
+    }
+    
+    //    events = floor( boundrand( (float)minproc, (float) maxproc) );
+    
+    x->pcount = pcount;
 }
 
 void chameleon_recall_parameters_exec(t_chameleon *x)
