@@ -47,6 +47,11 @@ void sarec_punchfade(t_sarec *x, t_floatarg fadetime);
 void sarec_perform64(t_sarec *x, t_object *dsp64, double **ins,
                      long numins, double **outs,long numouts, long n,
                      long flags, void *userparam);
+void sarec_dsp64(t_sarec *x, t_object *dsp64, short *count, double sr, long n, long flags);
+
+
+
+t_max_err sarec_notify(t_sarec *x, t_symbol *s, t_symbol *msg, void *sender, void *data);
 
 int C74_EXPORT main(void)
 {
@@ -61,11 +66,19 @@ int C74_EXPORT main(void)
 	class_addmethod(c,(method)sarec_record,"record", 0);
 	class_addmethod(c,(method)sarec_region,"region",A_GIMME, 0);
 	class_addmethod(c,(method)sarec_regionsamps,"regionsamps",A_GIMME, 0);
+    class_addmethod(c,(method)sarec_notify, "notify", A_CANT, 0);
+    class_addmethod(c,(method)sarec_dsp64, "dsp64", A_CANT, 0);
 	potpourri_announce(OBJECT_NAME);
+    post("this is sarec update v2!\n");
 	class_dspinit(c);
 	class_register(CLASS_BOX, c);
 	sarec_class = c;
 	return 0;
+}
+
+t_max_err sarec_notify(t_sarec *x, t_symbol *s, t_symbol *msg, void *sender, void *data)
+{
+    return buffer_ref_notify(x->recbuf, s, msg, sender, data);
 }
 
 void sarec_assist (t_sarec *x, void *b, long msg, long arg, char *dst)
@@ -128,7 +141,7 @@ void sarec_perform64(t_sarec *x, t_object *dsp64, double **ins,
                      long numins, double **outs,long numouts, long n,
                      long flags, void *userparam)
 {
-    int i, j;
+    int i, j, k;
 	t_double *click_inlet = ins[0];
 	t_double *record_inlet;
 	t_double *sync;
@@ -153,20 +166,25 @@ void sarec_perform64(t_sarec *x, t_object *dsp64, double **ins,
 	if(! regionsamps ){
 		x->regionsamps = regionsamps = end_frame - start_frame;
 	}
-    
+   //  goto zero;
 	buffer_ref_set(x->recbuf, x->bufname);
     recbuf_b = buffer_ref_getobject(x->recbuf);
     if(recbuf_b == NULL){
-        return;
+        object_post((t_object *)x, "\"%s\" is an invalid buffer", x->bufname->s_name);
+        goto zero;
     }
-//    b_nchans = buffer_getchannelcount(recbuf_b);
+   // b_nchans = buffer_getchannelcount(recbuf_b);
     b_frames= buffer_getframecount(recbuf_b);
+    if( b_frames <= 0){
+        object_post((t_object *)x, "\"%s\" is an empty buffer", x->bufname->s_name);
+        goto zero;
+    }
     samples = buffer_locksamples(recbuf_b);
 	for(i = 0; i < n; i++){
 		// could be record (1) or overdub (2)
 		if( click_inlet[i] ){
 			clickval = (int) click_inlet[i];
-			// post("click value is %d", clickval);
+			post("click value is %d", clickval);
 			// signal to stop recording
 			if(clickval == -2) {
 				status = 0;
@@ -273,6 +291,13 @@ void sarec_perform64(t_sarec *x, t_object *dsp64, double **ins,
 	x->end_frame = end_frame;
 	x->status = status;
 	x->counter = counter;
+    return;
+zero:
+    for(k = 0; k < n; k++) {
+        for(i = 0; i < numouts; i++){
+            outs[i][k] = 0.0;
+        }
+    }
 }
 
 void sarec_overdub(t_sarec *x)
@@ -394,15 +419,28 @@ void sarec_dsp64(t_sarec *x, t_object *dsp64, short *count, double sr, long n, l
     t_buffer_obj *b;
 	t_symbol *bufname = x->bufname;
     
-	buffer_ref_set(x->recbuf, bufname);
-    b = buffer_ref_getobject(x->recbuf);
+    
+	// buffer_ref_set(x->recbuf, bufname);
+   
+    
+    /*
     if(!sr)
         return;
-	sarec_attach_buffer(x);
+    */
+	// sarec_attach_buffer(x);
+    // post("spark up sarec dsp\n");
+    if (!x->recbuf){
+       //  post("first buffer attach\n");
+        x->recbuf = buffer_ref_new((t_object*)x, x->bufname);
+    } else {
+      //  post("next buffer attach\n");
+        buffer_ref_set(x->recbuf, x->bufname);
+    }
+    b = buffer_ref_getobject(x->recbuf);
 	if( x->start_frame < 0 && x->end_frame < 0){
 		x->start_frame = 0;
 		x->end_frame = buffer_getframecount(b) - 1;
-		post("new frame extrema: %ld %ld",x->start_frame,x->end_frame);
+	//	post("new frame extrema: %ld %ld",x->start_frame,x->end_frame);
 	}
     object_method(dsp64, gensym("dsp_add64"),x,sarec_perform64,0,NULL);
 }
