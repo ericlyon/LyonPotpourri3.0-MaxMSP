@@ -2,7 +2,7 @@
 
 LyonPotpourri is a collection of externals developed for the creation and performance of computer music. The externals were originally developed for Max/MSP, and then extended into hybrid code that could compile for both Max/MSP and Pd. As of version 3.0, LyonPotpourri has diverged into separate Pd and Max/MSP versions. The Pd version is available [here](https://github.com/ericlyon/pd-lyonpotpourri).
 
-LyonPotpourri is Copyright Eric Lyon, 1999-2023, and is covered under the MIT license. Please see the accompanying License file for details.
+LyonPotpourri is Copyright Eric Lyon, 1999-2025, and is covered under the MIT license. Please see the accompanying License file for details.
 
 ## Object Listing
 
