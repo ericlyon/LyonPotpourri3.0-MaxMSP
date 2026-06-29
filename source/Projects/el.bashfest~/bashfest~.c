@@ -454,13 +454,14 @@ void bashfest_dsp_free(t_bashfest *x)
 {
 	int i;
 	dsp_free((t_pxobject *)x);
+    for(i=0;i<x->overlap_max;i++){
+        sysmem_freeptr(x->events[i].workbuffer);
+    }
 	sysmem_freeptr(x->events);
 	sysmem_freeptr(x->sinewave);
 	sysmem_freeptr(x->params);
 	sysmem_freeptr(x->odds);
-	for(i=0;i<x->overlap_max;i++){
-		sysmem_freeptr(x->events[i].workbuffer);
-	}
+
 	sysmem_freeptr(x->delayline1);
 	sysmem_freeptr(x->delayline2);
 	sysmem_freeptr(x->eel);
@@ -471,6 +472,7 @@ void bashfest_dsp_free(t_bashfest *x)
 	for(i=0;i<MAXFILTER;i++){
 		sysmem_freeptr(x->ellipse_data[i] );
 	}
+    sysmem_freeptr(x->ellipse_data);
 	sysmem_freeptr(x->transfer_function);
 	sysmem_freeptr(x->feedfunc1);
 	sysmem_freeptr(x->feedfunc2);
@@ -480,11 +482,15 @@ void bashfest_dsp_free(t_bashfest *x)
 	for( i = 0; i < 4; i++ ){
 		sysmem_freeptr(x->combies[i].arr);
 	}
+    sysmem_freeptr(x->combies);
 	sysmem_freeptr(x->adsr->func);
 	sysmem_freeptr(x->adsr);
 	sysmem_freeptr(x->dcflt);
 	sysmem_freeptr(x->tcycle.data);
-}	
+    if (x->buffer_ref){
+        object_free(x->buffer_ref);
+    }
+}
 
 void bashfest_dblclick(t_bashfest *x)
 {
@@ -967,7 +973,9 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 		}
 	}
     laterAlligator:
-        buffer_unlocksamples(the_buffer);
+        if(the_buffer){
+            buffer_unlocksamples(the_buffer);
+        }
 }
 
 void bashfest_copy_to_MSP_buffer(t_bashfest *x, int slot)
@@ -1035,8 +1043,8 @@ void bashfest_deploy_dsp(t_bashfest *x)
 	
 	if(b_nchans <1 || b_nchans > 2){
 		error("illegal channels in buffer:%d",b_nchans);
+        x->hosed = 1;
 		goto outtahere;
-		x->hosed = 1;
 	}
 	if(b_frames > x->buf_frames / 2){
 		long sr;

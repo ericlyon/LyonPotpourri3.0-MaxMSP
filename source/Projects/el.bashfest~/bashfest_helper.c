@@ -534,10 +534,13 @@ void set_distortion_table(float *arr, float cut, float max, int len)
 		*(arr + i) = - *(arr + len - (i+1));
 }
 
-float dlookup(float samp,float *arr,int len) 
+// fixed crashing bug in previous version of dlookup()
+float dlookup(float samp,float *arr,int len)
 {
-	return arr[(int) (((samp+1.0)/2.0) * (float) len)];
-	
+    int idx = (int)(((samp + 1.0) / 2.0) * (float)len);
+    if (idx < 0)   idx = 0;
+    if (idx >= len) idx = len - 1;
+    return arr[idx];
 }
 
 void do_compdist(float *in,float *out,int sampFrames,int nchans,int channel, 
@@ -550,9 +553,12 @@ void do_compdist(float *in,float *out,int sampFrames,int nchans,int channel,
 	
 	for( i = channel ; i < sampFrames * nchans; i+= nchans )
     {
-		
 		if( lookupflag){
-			*(out + i) = dlookup( *(in + i)/bufMaxamp, table, range );
+            if (bufMaxamp > 0.0) {
+                *(out + i) = dlookup(*(in + i) / bufMaxamp, table, range);
+            } else {
+                *(out + i) = 0.0;
+            }
 		} else {
 			rectsamp = fabs( *(in + i) ) / bufMaxamp;
 			if( rectsamp > cutoff ){
