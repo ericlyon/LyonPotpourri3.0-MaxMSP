@@ -6,13 +6,15 @@
 #define DEFAULT_MAX_OVERLAP (8) // number of overlapping instances allowed
 #define ACTIVE 0
 #define INACTIVE 1
+#define WAITING 2
 #define MAX_VEC 4096
 #define DEFAULT_BUFFER_SIZE 4000.0 // 4 second default buffer size * 2
 #define DEFAULT_LATENCY 8192 //latency in samples after a trigger for note to start
 #define MAX_PARAMETERS 2048
 #define PROCESS_COUNT 20
 #define CYCLE_MAX 1024
-
+// add safety samples to each allocated block of memory
+#define BUF_PAD (48000)
 #define OBJECT_NAME "bashfest~"
 
 
@@ -27,6 +29,8 @@ void bashfest_dsp_free(t_bashfest *x);
 //int bashfest_set_parameters(t_bashfest *x,float *params);
 int bashfest_set_parameters(t_bashfest *x,float *params, float transpose_factor);
 t_int *bashfest_perform(t_int *w);
+
+// void bashfest_deploy_dsp(t_bashfest *x);
 void bashfest_deploy_dsp(t_bashfest *x);
 void bashfest_copy_to_MSP_buffer(t_bashfest *x, int slot);
 /*user messages*/
@@ -46,6 +50,7 @@ void bashfest_verbose(t_bashfest *x, t_floatarg t);
 void bashfest_block_dsp(t_bashfest *x, t_floatarg t);
 void bashfest_gozero(t_bashfest *x);
 void bashfest_grab(t_bashfest *x);
+void bashfest_printmem(t_bashfest *x);
 void bashfest_setodds(t_bashfest *x,t_symbol *msg, short argc, t_atom *argv);
 void bashfest_tcycle(t_bashfest *x,t_symbol *msg, short argc, t_atom *argv);
 void bashfest_version(t_bashfest *x);
@@ -107,6 +112,7 @@ int C74_EXPORT main(void)
 	class_addmethod(c,(method)bashfest_block_dsp,"block_dsp", A_FLOAT, 0);
     class_addmethod(c, (method)bashfest_dsp64, "dsp64", A_CANT,0);
     class_addmethod(c,(method)bashfest_notify,"notify", A_CANT, 0);
+    class_addmethod(c,(method)bashfest_printmem,"printmem", 0);
 	
 	CLASS_ATTR_LONG(c, "latency", 0, t_bashfest, latency_samples);
 	CLASS_ATTR_DEFAULT_SAVE(c, "latency", 0, "8192");
@@ -116,6 +122,7 @@ int C74_EXPORT main(void)
 	class_register(CLASS_BOX, c);
 	bashfest_class = c;	
 	potpourri_announce(OBJECT_NAME);
+    post("updated BASHFEST\n");
 	return 0;
 }
 
@@ -151,6 +158,11 @@ void bashfest_minimum_process(t_bashfest *x, t_floatarg n)
 void bashfest_verbose(t_bashfest *x, t_floatarg t)
 {
 	x->verbose = (short)t;
+}
+
+void bashfest_printmem(t_bashfest *x)
+{
+    post("Memory (MB) for this el.bashfest~ unit: %f", x->memcnt);
 }
 
 t_max_err bashfest_latency_get(t_bashfest *x, void *attr, long *ac, t_atom **av)
@@ -306,8 +318,9 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	
 	x->sr = sys_getsr();
 	x->vs = sys_getblksize();
-	if(! x->sr)
-		x->sr = 44100;
+    if(!x->sr){
+        x->sr = 44100;
+    }
 	
 	
 	x->work_buffer_size = DEFAULT_BUFFER_SIZE;
@@ -350,59 +363,62 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	
 	x->maxdelay = 1.0; // in seconds
 	/*memory allocation */
-	x->events = (t_event *) sysmem_newptr(x->overlap_max * sizeof(t_event));
-	x->sinewave = (float *) sysmem_newptr( (x->sinelen + 1) * sizeof(float));
-	x->params = (float *) sysmem_newptr(MAX_PARAMETERS * sizeof(float));
-	x->odds = (float *) sysmem_newptr(64 * sizeof(float));
+	x->events = (t_event *) sysmem_newptrclear(x->overlap_max * sizeof(t_event));
+	x->sinewave = (float *) sysmem_newptrclear( (x->sinelen + BUF_PAD) * sizeof(float));
+	x->params = (float *) sysmem_newptrclear(MAX_PARAMETERS * sizeof(float));
+	x->odds = (float *) sysmem_newptrclear(64 * sizeof(float));
 	//  x->trigger_buffer = calloc(x->latency_samples, sizeof(float));
 	
-	for(i=0;i<64;i++)
-		x->odds[i] = 0;
+    for(i=0;i<64;i++){
+        x->odds[i] = 0;
+    }
 	putsine(x->sinewave, x->sinelen);
 	for(i=0;i<x->overlap_max;i++){
-		x->events[i].workbuffer = (float *) sysmem_newptr(x->buf_samps * sizeof(float));
+		x->events[i].workbuffer = (float *) sysmem_newptrclear((x->buf_samps + BUF_PAD) * sizeof(float));
 	}
-	x->delayline1 = (float *) sysmem_newptr( ((x->maxdelay * x->sr) + 2) * sizeof(float));
-	x->delayline2 = (float *) sysmem_newptr( ((x->maxdelay * x->sr) + 2) * sizeof(float));
+	x->delayline1 = (float *) sysmem_newptrclear(((x->maxdelay * x->sr) + 2 + BUF_PAD) * sizeof(float));
+	x->delayline2 = (float *) sysmem_newptrclear( ((x->maxdelay * x->sr) + 2 + BUF_PAD) * sizeof(float));
 	x->max_mini_delay = .25;
-	x->eel = (LSTRUCT *) sysmem_newptr(MAXSECTS * sizeof(LSTRUCT));
+	x->eel = (LSTRUCT *) sysmem_newptrclear(MAXSECTS * sizeof(LSTRUCT));
 	for( i = 0; i < 4 ; i++ ){
 		x->mini_delay[i] = 
-		(float *) sysmem_newptr(((int)(x->sr * x->max_mini_delay) + 1)  * sizeof(float));
+		(float *) sysmem_newptrclear(((int)(x->sr * x->max_mini_delay) + BUF_PAD)  * sizeof(float));
 	}
-	x->reverb_ellipse_data = (float *) sysmem_newptr(16 * sizeof(float));
+	x->reverb_ellipse_data = (float *) sysmem_newptrclear(16 * sizeof(float));
 	
-	x->ellipse_data = (float **) sysmem_newptr(MAXFILTER * sizeof(float *));
+	x->ellipse_data = (float **) sysmem_newptrclear(MAXFILTER * sizeof(float *));
 	for(i=0;i<MAXFILTER;i++){
-		x->ellipse_data[i] = (float *) sysmem_newptr(MAX_COEF * sizeof(float));
+		x->ellipse_data[i] = (float *) sysmem_newptrclear(MAX_COEF * sizeof(float));
 	}
 	x->tf_len = 1;
 	x->tf_len <<= 16;
-	x->transfer_function = (float *) sysmem_newptr(x->tf_len * sizeof(float) );
+	x->transfer_function = (float *) sysmem_newptrclear(x->tf_len * sizeof(float) );
 	x->feedfunclen = 8192 ;
-	x->feedfunc1 = (float *) sysmem_newptr( x->feedfunclen * sizeof(float) );
-	x->feedfunc2 = (float *) sysmem_newptr( x->feedfunclen * sizeof(float) );
-	x->feedfunc3 = (float *) sysmem_newptr( x->feedfunclen * sizeof(float) );
-	x->feedfunc4 = (float *) sysmem_newptr( x->feedfunclen * sizeof(float) );
+	x->feedfunc1 = (float *) sysmem_newptrclear( x->feedfunclen * sizeof(float) );
+	x->feedfunc2 = (float *) sysmem_newptrclear( x->feedfunclen * sizeof(float) );
+	x->feedfunc3 = (float *) sysmem_newptrclear( x->feedfunclen * sizeof(float) );
+	x->feedfunc4 = (float *) sysmem_newptrclear( x->feedfunclen * sizeof(float) );
 	x->flamfunc1len = 8192 ;
-	x->flamfunc1 = (float *) sysmem_newptr( x->flamfunc1len * sizeof(float));
+	x->flamfunc1 = (float *) sysmem_newptrclear( x->flamfunc1len * sizeof(float));
 	setflamfunc1(x->flamfunc1,x->flamfunc1len);
 	x->max_comb_lpt = 0.15 ;// watch out here
-	x->combies = (CMIXCOMB *) sysmem_newptr(4 * sizeof(CMIXCOMB));
+	x->combies = (CMIXCOMB *) sysmem_newptrclear(4 * sizeof(CMIXCOMB));
+    x->resies = (CMIXRESON *) sysmem_newptrclear(4 * sizeof(CMIXRESON));
 	for( i = 0; i < 4; i++ ){
 		x->combies[i].len = x->sr * x->max_comb_lpt + 2;
-		x->combies[i].arr = (float *) sysmem_newptr(x->combies[i].len * sizeof(float));
+		x->combies[i].arr = (float *) sysmem_newptrclear(x->combies[i].len * sizeof(float));
 	}
-	x->adsr = (CMIXADSR *) sysmem_newptr(1 * sizeof(CMIXADSR));
+	x->adsr = (CMIXADSR *) sysmem_newptrclear(1 * sizeof(CMIXADSR));
 	x->adsr->len = 32768 ;
-	x->adsr->func = (float *) sysmem_newptr(x->adsr->len * sizeof(float) );
-	x->dcflt = (float *) sysmem_newptr(16 * sizeof(float));
-	x->tcycle.data = (float *) sysmem_newptr(CYCLE_MAX * sizeof(float));
+	x->adsr->func = (float *) sysmem_newptrclear(x->adsr->len * sizeof(float) );
+	x->dcflt = (float *) sysmem_newptrclear(16 * sizeof(float));
+	x->tcycle.data = (float *) sysmem_newptrclear(CYCLE_MAX * sizeof(float));
 	x->tcycle.len = 0;
 	for(i=0;i<x->overlap_max;i++){
 		x->events[i].phasef = x->events[i].phase = 0.0;
 	}
-	
+    x->qelem = qelem_new(x, (method)bashfest_deploy_dsp);
+    
 	membytes = x->overlap_max * sizeof(t_event);
 	membytes += x->sinelen * sizeof(float);
 	membytes += MAX_PARAMETERS * sizeof(float);
@@ -424,8 +440,8 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	membytes += 16 * sizeof(float);
 	membytes += CYCLE_MAX * sizeof(float);
 	
-	post("total memory for this bashfest %.2f MBytes",(float)membytes/1000000.);
-	
+	// post("total memory for this bashfest %.2f MBytes",(float)membytes/1000000.);
+    x->memcnt = (float)membytes/1000000.0;
 	/* be sure to finish clearing memory */
 	set_dcflt(x->dcflt);
 	init_reverb_data(x->reverb_ellipse_data);
@@ -433,27 +449,31 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	
 	for(i=0;i<PROCESS_COUNT;i++){
 		x->odds[i] = 1;
-	}	
-	
+	}
 	x->min_process_per_note = 0;
 	x->max_process_per_note = 2;
 	setweights(x->odds,PROCESS_COUNT);
-	
-	
 	x->mute = 0;
-	
 	for(i = 0; i < x->overlap_max; i++){
 		x->events[i].status = INACTIVE;
 	}
-	
-	
 	return (x);
 }
 
 void bashfest_dsp_free(t_bashfest *x)
 {
 	int i;
+    if (!x) return;
+    x->hosed = 1;
+    if (x->qelem) {
+        qelem_free(x->qelem);
+    }
 	dsp_free((t_pxobject *)x);
+    // stop all events in case defer is running at low thread priority
+    for(i = 0; i < x->overlap_max; i++){
+        x->events[i].status = INACTIVE;
+    }
+    
     for(i=0;i<x->overlap_max;i++){
         sysmem_freeptr(x->events[i].workbuffer);
     }
@@ -483,6 +503,7 @@ void bashfest_dsp_free(t_bashfest *x)
 		sysmem_freeptr(x->combies[i].arr);
 	}
     sysmem_freeptr(x->combies);
+    sysmem_freeptr(x->resies);
 	sysmem_freeptr(x->adsr->func);
 	sysmem_freeptr(x->adsr);
 	sysmem_freeptr(x->dcflt);
@@ -539,7 +560,7 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 	long flimit;
 	short insert_success;
 	long new_insert;
-	long i,j,k;
+	long i,j,k, slot_i;
 	t_cycle tcycle = x->tcycle;
 	t_double gain;
 	t_double transpose_factor;
@@ -554,7 +575,8 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 	int out_channels;
 	int latency_samples = x->latency_samples;
     t_buffer_obj *the_buffer= NULL;
- 
+    short deferred_argc = 2; // number of arguments
+    t_atom deferred_argv[2]; // atom arguments
     if(x->mute || x->hosed){
         for(i = 0; i < n; i++){
             outs[0][i] = 0;
@@ -610,22 +632,22 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 			outchanL[i] = outchanR[i] = 0.0;
 		}
 		flimit = (b_frames - 1) * 2;
-		for(i = 0; i < overlap_max; i++){
-			if(events[i].status == ACTIVE){
-				gain = events[i].gain;
-				if(events[i].transpose){ // override tcycle
-					increment = events[i].transpose;
+		for(slot_i = 0; slot_i < overlap_max; slot_i++){
+			if(events[slot_i].status == ACTIVE){
+				gain = events[slot_i].gain;
+				if(events[slot_i].transpose){ // override tcycle
+					increment = events[slot_i].transpose;
 				}
 				if(b_nchans == 1){ /* mono */
 					
 					flimit = (b_frames - 1);
 					for(j = 0; j < n; j++){
-						if(events[i].countdown > 0){
-							--events[i].countdown;
+						if(events[slot_i].countdown > 0){
+							--events[slot_i].countdown;
 						} else {
 							
-							iphase = events[i].phasef;
-							frac = events[i].phasef - iphase;
+							iphase = events[slot_i].phasef;
+							frac = events[slot_i].phasef - iphase;
 							
 							if(increment > 0){
 								if(iphase == flimit || increment == 1.0){
@@ -650,11 +672,11 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 									outchanR[j] += samp1;
 								}
 							}
-							events[i].phasef += increment;
+							events[slot_i].phasef += increment;
 							
-							if( events[i].phasef < 0.0 || events[i].phasef >= b_frames){
-								events[i].status = INACTIVE;
-								events[i].phasef = 0;
+							if( events[slot_i].phasef < 0.0 || events[slot_i].phasef >= b_frames){
+								events[slot_i].status = INACTIVE;
+								events[slot_i].phasef = 0;
 								// post("valid exit mono note");
 								break;
 							}
@@ -664,11 +686,11 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 					/* stereo */
 					
 					for(j = 0; j < n; j++){
-						if(events[i].countdown > 0){
-							--events[i].countdown;
+						if(events[slot_i].countdown > 0){
+							--events[slot_i].countdown;
 						} else {
-							iphase = events[i].phasef;
-							frac = events[i].phasef - iphase;
+							iphase = events[slot_i].phasef;
+							frac = events[slot_i].phasef - iphase;
 							iphase *= 2;
 							if(increment > 0){
 								if(iphase == flimit || increment == 1.0){
@@ -695,10 +717,10 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 									outchanR[j] += gain * (samp1 + frac * (samp2-samp1));
 								}
 							}
-							events[i].phasef += increment;
+							events[slot_i].phasef += increment;
 							
-							if( events[i].phasef < 0.0 || events[i].phasef >= b_frames){
-								events[i].status = INACTIVE;
+							if( events[slot_i].phasef < 0.0 || events[slot_i].phasef >= b_frames){
+								events[slot_i].status = INACTIVE;
 								break;
 							}
 						}
@@ -714,7 +736,8 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 				insert_success = 0;
 				for(j=0; j<overlap_max; j++){
 					if(events[j].status == INACTIVE){
-						events[j].status = ACTIVE;
+                        // events[j].status = ACTIVE;
+						events[j].status = WAITING; // tag the new slot but don't activate it yet
 						events[j].gain = gain;
 						if(increment > 0){
 							events[j].phasef = 0.0;
@@ -748,7 +771,7 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 					post("stealing a note at %d for buffer %s", new_insert, sound_name);
 				}
 				events[new_insert].countdown = latency_samples;
-				events[new_insert].status = ACTIVE;
+				events[new_insert].status = WAITING;
 				x->new_slot = new_insert;
 				x->new_gain = gain;
 				// post("new note at slot %d",new_insert);
@@ -858,35 +881,35 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 	
 	/* add output from all active buffers into global outlet buffers */
 	
-	for(i = 0; i < overlap_max; i++){
-		if( events[i].status == ACTIVE){
-			out_channels = events[i].out_channels;
+	for(slot_i = 0; slot_i < overlap_max; slot_i++){
+		if( events[slot_i].status == ACTIVE){
+			out_channels = events[slot_i].out_channels;
 			/* assign the output part of work buffer to the local float buffer */
 			
-			processed_drum = events[i].workbuffer + events[i].in_start;
+			processed_drum = events[slot_i].workbuffer + events[slot_i].in_start;
 			
 			for(j = 0; j < n; j++){
 				if(x->grab){
 					x->grab = 0;
 					// if too slow, defend with defer_low()
-					bashfest_copy_to_MSP_buffer(x,i);
+					bashfest_copy_to_MSP_buffer(x,slot_i);
 				}
-				if(events[i].countdown > 0){
-					--events[i].countdown;
+				if(events[slot_i].countdown > 0){
+					--events[slot_i].countdown;
 				} else {
 					if(out_channels == 1){
-						outchanL[j] += processed_drum[events[i].phase] * events[i].gainL;
-						outchanR[j] += processed_drum[events[i].phase] * events[i].gainR;
+						outchanL[j] += processed_drum[events[slot_i].phase] * events[slot_i].gainL;
+						outchanR[j] += processed_drum[events[slot_i].phase] * events[slot_i].gainR;
 					} else if(out_channels == 2){
-						iphase = events[i].phase * 2;
-						outchanL[j] += processed_drum[iphase] * events[i].gainL;
-						outchanR[j] += processed_drum[iphase+1] * events[i].gainR;
+						iphase = events[slot_i].phase * 2;
+						outchanL[j] += processed_drum[iphase] * events[slot_i].gainL;
+						outchanR[j] += processed_drum[iphase+1] * events[slot_i].gainR;
 					}
 					
-					events[i].phase++;
+					events[slot_i].phase++;
 					
-					if(events[i].phase >= events[i].sample_frames){
-						events[i].status = INACTIVE;
+					if(events[slot_i].phase >= events[slot_i].sample_frames){
+						events[slot_i].status = INACTIVE;
 						break;
 					}
 				}
@@ -903,13 +926,13 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 			transpose_factor =  transpose_vec[i];
 			/*look for an open slot*/
 			insert_success = 0;
-			for(j=0; j<overlap_max; j++){
-				if(events[j].status == INACTIVE){
-					events[j].status = ACTIVE;
-					events[j].gain = gain;
-					events[j].transpose = transpose_factor;
+			for(slot_i = 0; slot_i < overlap_max; slot_i++){
+				if(events[slot_i].status == INACTIVE){
+					events[slot_i].status = WAITING;// will activate slot in deferred function
+					events[slot_i].gain = gain;
+					events[slot_i].transpose = transpose_factor;
 					insert_success = 1;
-					new_insert = j;
+					new_insert = slot_i;
 					break;
 				}
 			}	
@@ -917,10 +940,10 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 			if(!insert_success){ /* steal a note if necessary*/
 				maxphase = 0;
 				theft_candidate = 0;
-				for(k = 0; k < overlap_max; k++){
-					if(events[k].phase > maxphase){
-						maxphase = events[k].phase;
-						theft_candidate = k;
+				for(slot_i = 0; slot_i < overlap_max; slot_i++){
+					if(events[slot_i].phase > maxphase){
+						maxphase = events[slot_i].phase;
+						theft_candidate = slot_i;
 					}
 				}
 				if(x->verbose){
@@ -928,15 +951,22 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 				}
 				//post("stealing a note at %d for buffer %s", theft_candidate, sound_name);
 				new_insert = theft_candidate;
+                events[new_insert].status = WAITING;
 				events[new_insert].gain = gain;
+                events[new_insert].transpose = transpose_factor;
 				insert_success = 1;
 			}
 			
 			events[new_insert].countdown = x->latency_samples;
 			x->new_slot = new_insert;
 			x->new_gain = gain;
-			defer_low(x,(void *)bashfest_deploy_dsp,0,0,0);
-			
+            qelem_set(x->qelem);
+            /*
+            atom_setlong(&deferred_argv[0], (long)new_insert);
+            atom_setfloat(&deferred_argv[1], gain);
+			defer_low(x,(void *)bashfest_deploy_dsp,0,deferred_argc,deferred_argv);
+			*/
+            
 			/* now begin output from the new note */
 			
 			out_channels = events[new_insert].out_channels;
@@ -951,13 +981,14 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 					if(x->grab){
 						x->grab = 0;
 						// if too slow, defend with defer_low()
-						bashfest_copy_to_MSP_buffer(x,i);
+						bashfest_copy_to_MSP_buffer(x,new_insert);
 					}
+                    // possibly zero out buffers until we move from WAITING to ACTIVE
 					if(out_channels == 1){
 						outchanL[j] += processed_drum[iphase] * events[new_insert].gainL;
 						outchanR[j] += processed_drum[iphase] * events[new_insert].gainR;
 					} else if(out_channels == 2){
-						iphase = events[i].phase * 2;
+                        iphase = events[new_insert].phase * 2;
 						outchanL[j] += processed_drum[iphase] * events[new_insert].gainL;
 						outchanR[j] += processed_drum[iphase+1] * events[new_insert].gainR;
 					}
@@ -1014,7 +1045,9 @@ void bashfest_copy_to_MSP_buffer(t_bashfest *x, int slot)
 	}
     buffer_unlocksamples(the_buffer);
 }
-void bashfest_deploy_dsp(t_bashfest *x)
+
+/*
+void bashfest_deploy_dsp(t_bashfest *x, t_symbol *s, short argc, t_atom *argv)
 {
 	float *b_samples;
 	long b_nchans;
@@ -1032,12 +1065,29 @@ void bashfest_deploy_dsp(t_bashfest *x)
 	int slot = x->new_slot;
 	float gain = x->new_gain;
 	float transpose_factor = events[slot].transpose;
+    int copy_count;
     t_buffer_obj *the_buffer;
 	attach_buffer(x);
     the_buffer = buffer_ref_getobject(x->buffer_ref);
     b_samples = buffer_locksamples(the_buffer);
 	b_frames = buffer_getframecount(the_buffer);
 	b_nchans = buffer_getchannelcount(the_buffer);
+    // bail condition when freeing Max object
+    if(x->hosed){
+        return;
+    };
+    
+    slot = -1;
+    atom_arg_getlong(&slot,0,argc,argv);
+    if(slot == -1){
+        post("bad slot to bashfest_deploy_dsp");
+        return;
+    }
+    // post("deploy_dsp: slot is %d\n",slot);
+    gain = -1.0; // testing only
+    atom_arg_getfloat(&gain,1,argc,argv);
+   //  post("deploy_dsp: gain is %f\n",gain);
+    
     
 	events[slot].completed = 1;// for testing only
 	
@@ -1046,41 +1096,40 @@ void bashfest_deploy_dsp(t_bashfest *x)
         x->hosed = 1;
 		goto outtahere;
 	}
-	if(b_frames > x->buf_frames / 2){
-		long sr;
-		
-		sr = 44100; // cheat for now
-		x->buf_frames = (b_frames + (1 * sr)) * 2; // 1 second pad, 2 channels
-		x->buf_samps = x->buf_frames * 2; // work buffer is twice size of MSP buffer
-		x->halfbuffer = x->buf_samps / 2;
-		post("sample in buffer %s is to large for work buffer, which will be resized",x->sound_name);
-		for(i=0;i<x->overlap_max;i++){
-			x->events[i].workbuffer = (float *) sysmem_resizeptr((void*)x->events[i].workbuffer,(x->buf_samps * sizeof(float)));
-		}
-		goto outtahere;// we do not deploy, just this once
-	}
-	
+    
+    // comment out previous resize code
+
 	pan = boundrand(0.1, 0.9);
 	events[slot].gainL = cos(PIOVERTWO * pan) * gain;
 	events[slot].gainR = sin(PIOVERTWO * pan) * gain;
 	events[slot].phase = 0;
-	events[slot].status = ACTIVE;
-	/*  if(x->verbose)
-	 post("initiating note at slot %d, gain %f, pan %f,inchans %d",slot,gain,pan,b_nchans);
-	 */
+	// events[slot].status = ACTIVE;
+
 	if(x->sound_lock){
 		goto outtahere;// of course should finally copy good stuff to MSP buffer
 	}
 	events[slot].out_channels = b_nchans;
-	events[slot].sample_frames = b_frames;
-	for(i=0; i<b_frames*b_nchans; i++){
-		events[slot].workbuffer[i] = b_samples[i];
-	}
+    if(b_frames <= x->buf_frames){
+        events[slot].sample_frames = b_frames;
+    }
+    copy_count = b_frames * b_nchans;
+    if(copy_count > x->buf_samps){
+        // error("bashfest~: buffer too large to copy (%d samples), truncating", copy_count);
+        copy_count = x->buf_samps;
+    }
+    for(i=0; i<copy_count; i++){
+        events[slot].workbuffer[i] = b_samples[i];
+    }
+
 	
 	// clean rest of work buffer
-	for(i=b_frames*b_nchans; i<buf_samps; i++){
-		events[slot].workbuffer[i] = 0.0;
-	}
+
+    // clean rest of buffer
+    for(i = copy_count; i < x->buf_samps; i++){
+        events[slot].workbuffer[i] = 0.0;
+    }
+
+    
 	events[slot].in_start = 0;
 	events[slot].out_start = x->halfbuffer;
 	pcount = bashfest_set_parameters(x, params, transpose_factor);
@@ -1173,10 +1222,150 @@ void bashfest_deploy_dsp(t_bashfest *x)
 	
 	if(events[slot].countdown <= 0){
 		error("%s: DSP failed to conclude for buffer %s. Increase latency",OBJECT_NAME,x->sound_name);
-	}
+    } else {
+        events[slot].status = ACTIVE; // only activate after DSP was concluded
+    }
 outtahere:
     buffer_unlocksamples(the_buffer);
 }
+*/
+
+void bashfest_deploy_dsp(t_bashfest *x)
+{
+    float *b_samples;
+    long b_nchans, b_frames;
+    t_event *events = x->events;
+    float *params = x->params;
+    t_buffer_obj *the_buffer;
+    int i, slot;
+
+    // 1. Bail if the object is being freed
+    if (x->hosed) {
+        return;
+    }
+
+    // 2. Attach and Lock the MSP Source Buffer
+    attach_buffer(x);
+    the_buffer = buffer_ref_getobject(x->buffer_ref);
+    if (!the_buffer) {
+        return;
+    }
+
+    b_samples = buffer_locksamples(the_buffer);
+    b_frames = buffer_getframecount(the_buffer);
+    b_nchans = buffer_getchannelcount(the_buffer);
+
+    // Initial check for buffer validity
+    if (!b_samples || b_nchans < 1 || b_nchans > 2) {
+        if (the_buffer) buffer_unlocksamples(the_buffer);
+        return;
+    }
+
+    // 3. Scan all slots for notes marked as WAITING by the audio thread
+    for (slot = 0; slot < x->overlap_max; slot++) {
+        if (events[slot].status == WAITING) {
+            
+            // Note: gain and transpose_factor were stored in the slot by perform64
+            float gain = events[slot].gain;
+            float transpose_factor = events[slot].transpose;
+            
+            // Randomize spatial position
+            float pan = boundrand(0.1, 0.9);
+            events[slot].gainL = cos(PIOVERTWO * pan) * gain;
+            events[slot].gainR = sin(PIOVERTWO * pan) * gain;
+            
+            events[slot].phase = 0;
+            events[slot].out_channels = b_nchans;
+            events[slot].sample_frames = b_frames;
+
+            // 4. Initial Copy: Transfer audio from MSP buffer to the slot's private workbuffer
+            int copy_count = b_frames * b_nchans;
+            if (copy_count > x->buf_samps) {
+                copy_count = x->buf_samps;
+            }
+            
+            // Copy audio data
+            for (i = 0; i < copy_count; i++) {
+                events[slot].workbuffer[i] = b_samples[i];
+            }
+            
+            // SAFETY: Zero out the rest of the workbuffer to prevent "ghost" audio
+            for (i = copy_count; i < x->buf_samps; i++) {
+                events[slot].workbuffer[i] = 0.0f;
+            }
+
+            // Set initial Ping-Pong state
+            events[slot].in_start = 0;
+            events[slot].out_start = x->halfbuffer;
+
+            // 5. Generate random effect parameters for this note
+            int pcount = bashfest_set_parameters(x, params, transpose_factor);
+            int curarg = 0;
+
+            // 6. Execute the DSP Chain
+            // Each routine reads from in_start and writes to out_start (ping-pong)
+            while (curarg < pcount) {
+                int type = (int)params[curarg];
+                
+                if      (type == TRANSPOSE)  transpose(x, slot, &curarg);
+                else if (type == RINGMOD)    ringmod(x, slot, &curarg);
+                else if (type == RETRO)      retrograde(x, slot, &curarg);
+                else if (type == COMB)       comber(x, slot, &curarg);
+                else if (type == FLANGE)     flange(x, slot, &curarg);
+                else if (type == BUTTER)     butterme(x, slot, &curarg);
+                else if (type == TRUNCATE)   truncateme(x, slot, &curarg);
+                else if (type == SWEEPRESON) sweepreson(x, slot, &curarg);
+                else if (type == SLIDECOMB)  slidecomb(x, slot, &curarg);
+                else if (type == REVERB1)    reverb1(x, slot, &curarg);
+                else if (type == ELLIPSE)    ellipseme(x, slot, &curarg);
+                else if (type == FEED1)      feed1me(x, slot, &curarg);
+                else if (type == FLAM1)      flam1(x, slot, &curarg);
+                else if (type == FLAM2)      flam2(x, slot, &curarg);
+                else if (type == EXPFLAM)    expflam(x, slot, &curarg);
+                else if (type == COMB4)      comb4(x, slot, &curarg);
+                else if (type == COMPDIST)   compdist(x, slot, &curarg);
+                else if (type == RINGFEED)   ringfeed(x, slot, &curarg);
+                else if (type == RESONADSR)  resonadsr(x, slot, &curarg);
+                else if (type == STV)        stv(x, slot, &curarg);
+                else {
+                    // Safety: if an unknown parameter is found, skip it to avoid infinite loop
+                    curarg++;
+                }
+            }
+
+            // 7. Normalization
+            // Process the final buffer to ensure peak amplitude is 1.0
+            float maxamp = 0.0f;
+            float *processed_ptr = events[slot].workbuffer + events[slot].in_start;
+            int total_samples = events[slot].sample_frames * events[slot].out_channels;
+            
+            // Ensure we don't scan past the half-buffer wall
+            if (total_samples > x->halfbuffer) {
+                total_samples = x->halfbuffer;
+            }
+
+            for (i = 0; i < total_samples; i++) {
+                float abs_val = fabs(processed_ptr[i]);
+                if (abs_val > maxamp) maxamp = abs_val;
+            }
+            
+            if (maxamp > 0.00001f) {
+                float rescale = 1.0f / maxamp;
+                for (i = 0; i < total_samples; i++) {
+                    processed_ptr[i] *= rescale;
+                }
+            }
+
+            // 8. Final Hand-off
+            // The note is fully rendered and normalized. Mark it ACTIVE for the audio thread.
+            events[slot].status = ACTIVE;
+        }
+    }
+
+    // 9. Clean up
+    buffer_unlocksamples(the_buffer);
+}
+
 
 int bashfest_set_parameters(t_bashfest *x,float *params, float transpose_factor)
 {
@@ -1366,7 +1555,12 @@ int bashfest_set_parameters(t_bashfest *x,float *params, float transpose_factor)
 			error("could not find a process for %d",j);
 			return 0;
 		}
+        if (pcount >= MAX_PARAMETERS - 32) {
+            error("bashfest~: too many parameters, truncation applied");
+            return pcount;
+        }
 	}
+    // post("Pcount: %d\n", pcount);
 	return pcount;
 }
 

@@ -67,6 +67,7 @@ typedef struct _bashfest
 	{
 		t_pxobject x_obj;
         t_buffer_ref *buffer_ref; // MSP reference to the buffer
+        void *qelem; // for scheduling DSP routine offline
         int already_failed; // flag to send bad buffer message just one time
 
 //		t_buffer *wavebuf; // holds waveform samples
@@ -133,8 +134,8 @@ typedef struct _bashfest
 		float **ellipse_data;
 		float *dcflt;
 		CMIXOSC oscar;
-		CMIXRESON resies[2];
-		
+		CMIXRESON *resies;
+        float memcnt;  // size of the bashfest~ memory in MB
 	} t_bashfest;
 
 
