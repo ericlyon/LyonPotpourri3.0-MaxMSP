@@ -29,8 +29,6 @@ void bashfest_dsp_free(t_bashfest *x);
 //int bashfest_set_parameters(t_bashfest *x,float *params);
 int bashfest_set_parameters(t_bashfest *x,float *params, float transpose_factor);
 t_int *bashfest_perform(t_int *w);
-
-// void bashfest_deploy_dsp(t_bashfest *x);
 void bashfest_deploy_dsp(t_bashfest *x);
 void bashfest_copy_to_MSP_buffer(t_bashfest *x, int slot);
 /*user messages*/
@@ -122,7 +120,6 @@ int C74_EXPORT main(void)
 	class_register(CLASS_BOX, c);
 	bashfest_class = c;	
 	potpourri_announce(OBJECT_NAME);
-    post("updated BASHFEST\n");
 	return 0;
 }
 
@@ -319,7 +316,7 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	x->sr = sys_getsr();
 	x->vs = sys_getblksize();
     if(!x->sr){
-        x->sr = 44100;
+        x->sr = 48000;
     }
 	
 	
@@ -356,9 +353,8 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	x->grab = 0;
 	
 	/* buffer contains space for both input and output, thus factor of 2 */
-	x->buf_frames = 2 * x->work_buffer_size * .001 * x->sr;
-	
-	x->buf_samps = x->buf_frames * 2;
+	x->buf_frames = x->work_buffer_size * .001 * x->sr;
+	x->buf_samps = x->buf_frames * 2 * 2; // two channels, double the size of the maximum workspace
 	x->halfbuffer = x->buf_samps / 2;
 	
 	x->maxdelay = 1.0; // in seconds
@@ -891,8 +887,8 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 			for(j = 0; j < n; j++){
 				if(x->grab){
 					x->grab = 0;
-					// if too slow, defend with defer_low()
-					bashfest_copy_to_MSP_buffer(x,slot_i);
+					// this needs to go into a qelem()
+					// bashfest_copy_to_MSP_buffer(x,slot_i);
 				}
 				if(events[slot_i].countdown > 0){
 					--events[slot_i].countdown;
@@ -1046,190 +1042,6 @@ void bashfest_copy_to_MSP_buffer(t_bashfest *x, int slot)
     buffer_unlocksamples(the_buffer);
 }
 
-/*
-void bashfest_deploy_dsp(t_bashfest *x, t_symbol *s, short argc, t_atom *argv)
-{
-	float *b_samples;
-	long b_nchans;
-	long b_frames;
-	t_event *events = x->events;
-	float pan;
-	int i; //,j;
-	float *params = x->params;
-	int pcount;
-	int buf_samps = x->buf_samps;
-	int curarg = 0;
-	float maxamp;
-	float rescale;
-	float *inbuf;
-	int slot = x->new_slot;
-	float gain = x->new_gain;
-	float transpose_factor = events[slot].transpose;
-    int copy_count;
-    t_buffer_obj *the_buffer;
-	attach_buffer(x);
-    the_buffer = buffer_ref_getobject(x->buffer_ref);
-    b_samples = buffer_locksamples(the_buffer);
-	b_frames = buffer_getframecount(the_buffer);
-	b_nchans = buffer_getchannelcount(the_buffer);
-    // bail condition when freeing Max object
-    if(x->hosed){
-        return;
-    };
-    
-    slot = -1;
-    atom_arg_getlong(&slot,0,argc,argv);
-    if(slot == -1){
-        post("bad slot to bashfest_deploy_dsp");
-        return;
-    }
-    // post("deploy_dsp: slot is %d\n",slot);
-    gain = -1.0; // testing only
-    atom_arg_getfloat(&gain,1,argc,argv);
-   //  post("deploy_dsp: gain is %f\n",gain);
-    
-    
-	events[slot].completed = 1;// for testing only
-	
-	if(b_nchans <1 || b_nchans > 2){
-		error("illegal channels in buffer:%d",b_nchans);
-        x->hosed = 1;
-		goto outtahere;
-	}
-    
-    // comment out previous resize code
-
-	pan = boundrand(0.1, 0.9);
-	events[slot].gainL = cos(PIOVERTWO * pan) * gain;
-	events[slot].gainR = sin(PIOVERTWO * pan) * gain;
-	events[slot].phase = 0;
-	// events[slot].status = ACTIVE;
-
-	if(x->sound_lock){
-		goto outtahere;// of course should finally copy good stuff to MSP buffer
-	}
-	events[slot].out_channels = b_nchans;
-    if(b_frames <= x->buf_frames){
-        events[slot].sample_frames = b_frames;
-    }
-    copy_count = b_frames * b_nchans;
-    if(copy_count > x->buf_samps){
-        // error("bashfest~: buffer too large to copy (%d samples), truncating", copy_count);
-        copy_count = x->buf_samps;
-    }
-    for(i=0; i<copy_count; i++){
-        events[slot].workbuffer[i] = b_samples[i];
-    }
-
-	
-	// clean rest of work buffer
-
-    // clean rest of buffer
-    for(i = copy_count; i < x->buf_samps; i++){
-        events[slot].workbuffer[i] = 0.0;
-    }
-
-    
-	events[slot].in_start = 0;
-	events[slot].out_start = x->halfbuffer;
-	pcount = bashfest_set_parameters(x, params, transpose_factor);
-	
-	while(curarg < pcount){
-		if(params[curarg] == TRANSPOSE){
-			transpose(x, slot, &curarg);
-		}
-		else if(params[curarg] == RINGMOD){
-			ringmod(x, slot, &curarg);
-		} 
-		else if(params[curarg] == RETRO){
-			retrograde(x, slot, &curarg);
-		} 
-		else if(params[curarg] == COMB){
-			comber(x, slot, &curarg);
-		}
-		else if(params[curarg] == FLANGE){
-			flange(x, slot, &curarg);
-		}
-		else if(params[curarg] == BUTTER){
-			butterme(x, slot, &curarg);
-		}
-		else if(params[curarg] == TRUNCATE){
-			truncateme(x, slot, &curarg);
-		}
-		else if(params[curarg] == SWEEPRESON){
-			sweepreson(x, slot, &curarg);
-		} 
-		else if(params[curarg] == SLIDECOMB){
-			slidecomb(x, slot, &curarg);
-		} 
-		else if(params[curarg] == REVERB1){
-			reverb1(x, slot, &curarg);
-		} 
-		else if(params[curarg] == ELLIPSE){
-			ellipseme(x, slot, &curarg);
-		} 
-		else if(params[curarg] == FEED1){
-			feed1me(x, slot, &curarg);
-		} 
-		else if(params[curarg] == FLAM1){
-			flam1(x, slot, &curarg);
-		}     	
-		else if(params[curarg] == FLAM2){
-			flam2(x, slot, &curarg);
-		} 
-		else if(params[curarg] == EXPFLAM){
-			expflam(x, slot, &curarg);
-		}
-		else if(params[curarg] == COMB4){
-			comb4(x, slot, &curarg);
-		}
-		else if(params[curarg] == COMPDIST){
-			compdist(x, slot, &curarg);
-		}
-		else if(params[curarg] == RINGFEED){
-			ringfeed(x, slot, &curarg);
-		}
-		else if(params[curarg] == RESONADSR){
-			resonadsr(x, slot, &curarg);
-		}
-		else if(params[curarg] == STV){
-			stv(x, slot, &curarg);
-		}
-		else {
-			error("deploy missing branch");
-		}
-	}
-	
-	maxamp = 0.0;
-	inbuf = events[slot].workbuffer + events[slot].in_start;
-	b_nchans = events[slot].out_channels;
-	b_frames = events[slot].sample_frames;
-	for(i=0; i< b_frames * b_nchans; i++){
-		if(maxamp < fabs(inbuf[i])){
-			maxamp = fabs(inbuf[i]);
-		}
-	}
-	if(maxamp>0){
-		rescale = 1.0/maxamp;
-		for(i=0; i< b_frames * b_nchans; i++){
-			inbuf[i] *= rescale;
-		}
-	}
-	else{
-		if(x->verbose)
-			error("zero maxamp detected");
-	}
-	
-	if(events[slot].countdown <= 0){
-		error("%s: DSP failed to conclude for buffer %s. Increase latency",OBJECT_NAME,x->sound_name);
-    } else {
-        events[slot].status = ACTIVE; // only activate after DSP was concluded
-    }
-outtahere:
-    buffer_unlocksamples(the_buffer);
-}
-*/
-
 void bashfest_deploy_dsp(t_bashfest *x)
 {
     float *b_samples;
@@ -1254,7 +1066,8 @@ void bashfest_deploy_dsp(t_bashfest *x)
     b_samples = buffer_locksamples(the_buffer);
     b_frames = buffer_getframecount(the_buffer);
     b_nchans = buffer_getchannelcount(the_buffer);
-
+    
+    
     // Initial check for buffer validity
     if (!b_samples || b_nchans < 1 || b_nchans > 2) {
         if (the_buffer) buffer_unlocksamples(the_buffer);
@@ -1276,13 +1089,15 @@ void bashfest_deploy_dsp(t_bashfest *x)
             
             events[slot].phase = 0;
             events[slot].out_channels = b_nchans;
-            events[slot].sample_frames = b_frames;
+            // events[slot].sample_frames = b_frames;
 
             // 4. Initial Copy: Transfer audio from MSP buffer to the slot's private workbuffer
             int copy_count = b_frames * b_nchans;
-            if (copy_count > x->buf_samps) {
-                copy_count = x->buf_samps;
+            if (copy_count > x->halfbuffer) {
+                copy_count = x->halfbuffer;
             }
+            events[slot].sample_frames = copy_count / b_nchans;
+
             
             // Copy audio data
             for (i = 0; i < copy_count; i++) {
@@ -1290,7 +1105,7 @@ void bashfest_deploy_dsp(t_bashfest *x)
             }
             
             // SAFETY: Zero out the rest of the workbuffer to prevent "ghost" audio
-            for (i = copy_count; i < x->buf_samps; i++) {
+            for (i = copy_count; i < (x->buf_samps + BUF_PAD); i++) {
                 events[slot].workbuffer[i] = 0.0f;
             }
 
