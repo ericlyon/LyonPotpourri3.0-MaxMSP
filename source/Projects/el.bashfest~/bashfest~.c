@@ -14,7 +14,7 @@
 #define PROCESS_COUNT 20
 #define CYCLE_MAX 1024
 // add safety samples to each allocated block of memory
-#define BUF_PAD (48000)
+#define BUF_PAD (2)
 #define OBJECT_NAME "bashfest~"
 
 
@@ -26,7 +26,6 @@ t_int *bashfest_perform_hosed(t_int *w);
 void bashfest_dsp(t_bashfest *x, t_signal **sp, short *count);
 void bashfest_assist (t_bashfest *x, void *b, long msg, long arg, char *dst);
 void bashfest_dsp_free(t_bashfest *x);
-//int bashfest_set_parameters(t_bashfest *x,float *params);
 int bashfest_set_parameters(t_bashfest *x,float *params, float transpose_factor);
 t_int *bashfest_perform(t_int *w);
 void bashfest_deploy_dsp(t_bashfest *x);
@@ -58,7 +57,7 @@ t_max_err bashfest_notify(t_bashfest *x, t_symbol *s, t_symbol *msg, void *sende
 
 /* function code */
 
-void killdc( float *inbuf, int in_frames, int channels, t_bashfest *x );
+void killdc( float *inbuf, int in_frames, int channels, LSTRUCT *eel, t_bashfest *x );
 void ringmod(t_bashfest *x, int slot, int *pcount);
 void retrograde(t_bashfest *x, int slot, int *pcount);
 void comber(t_bashfest *x, int slot, int *pcount);
@@ -308,7 +307,7 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 {
 	t_bashfest *x = (t_bashfest *)object_alloc(bashfest_class);
     
-	int i;
+	int i,j;
 	long membytes = 0;
 	float tmpfloat;
 	srand(time(0));
@@ -344,73 +343,91 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	x->x_obj.z_misc |= Z_NO_INPLACE;
 	
 	x->sinelen = 8192;
-	
 	x->verbose = 0;
 	x->most_recent_event = 0;
 	x->active_events = 0;
 	x->increment = 1.0;
 	x->block_dsp = 0;
 	x->grab = 0;
-	
 	/* buffer contains space for both input and output, thus factor of 2 */
 	x->buf_frames = x->work_buffer_size * .001 * x->sr;
 	x->buf_samps = x->buf_frames * 2 * 2; // two channels, double the size of the maximum workspace
 	x->halfbuffer = x->buf_samps / 2;
-	
 	x->maxdelay = 1.0; // in seconds
 	/*memory allocation */
 	x->events = (t_event *) sysmem_newptrclear(x->overlap_max * sizeof(t_event));
-	x->sinewave = (float *) sysmem_newptrclear( (x->sinelen + BUF_PAD) * sizeof(float));
+	x->sinewave = (float *) sysmem_newptrclear((x->sinelen + BUF_PAD) * sizeof(float));
 	x->params = (float *) sysmem_newptrclear(MAX_PARAMETERS * sizeof(float));
 	x->odds = (float *) sysmem_newptrclear(64 * sizeof(float));
-	//  x->trigger_buffer = calloc(x->latency_samples, sizeof(float));
 	
     for(i=0;i<64;i++){
         x->odds[i] = 0;
     }
 	putsine(x->sinewave, x->sinelen);
-	for(i=0;i<x->overlap_max;i++){
+	for(i=0; i < x->overlap_max; i++){
 		x->events[i].workbuffer = (float *) sysmem_newptrclear((x->buf_samps + BUF_PAD) * sizeof(float));
 	}
-	x->delayline1 = (float *) sysmem_newptrclear(((x->maxdelay * x->sr) + 2 + BUF_PAD) * sizeof(float));
-	x->delayline2 = (float *) sysmem_newptrclear( ((x->maxdelay * x->sr) + 2 + BUF_PAD) * sizeof(float));
+    for(i=0; i < x->overlap_max; i++){
+        x->events[i].delayline1 = (float *) sysmem_newptrclear(((x->maxdelay * x->sr) + 2 + BUF_PAD) * sizeof(float));
+        x->events[i].delayline2 = (float *) sysmem_newptrclear(((x->maxdelay * x->sr) + 2 + BUF_PAD) * sizeof(float));
+    }
 	x->max_mini_delay = .25;
-	x->eel = (LSTRUCT *) sysmem_newptrclear(MAXSECTS * sizeof(LSTRUCT));
-	for( i = 0; i < 4 ; i++ ){
-		x->mini_delay[i] = 
-		(float *) sysmem_newptrclear(((int)(x->sr * x->max_mini_delay) + BUF_PAD)  * sizeof(float));
-	}
+    for(i=0; i < x->overlap_max; i++){
+        x->events[i].eel = (LSTRUCT *) sysmem_newptrclear(MAXSECTS * sizeof(LSTRUCT));
+    }
+    for(i = 0; i < x->overlap_max; i++){
+        x->events[i].mini_delay = (float **) sysmem_newptrclear(4 * sizeof(float *));
+        for(j = 0; j < 4; j++){
+            x->events[i].mini_delay[j] = (float *) sysmem_newptrclear(((int)(x->sr * x->max_mini_delay) + BUF_PAD)  * sizeof(float));
+        }
+    }
 	x->reverb_ellipse_data = (float *) sysmem_newptrclear(16 * sizeof(float));
-	
 	x->ellipse_data = (float **) sysmem_newptrclear(MAXFILTER * sizeof(float *));
 	for(i=0;i<MAXFILTER;i++){
 		x->ellipse_data[i] = (float *) sysmem_newptrclear(MAX_COEF * sizeof(float));
 	}
 	x->tf_len = 1;
 	x->tf_len <<= 16;
-	x->transfer_function = (float *) sysmem_newptrclear(x->tf_len * sizeof(float) );
-	x->feedfunclen = 8192 ;
-	x->feedfunc1 = (float *) sysmem_newptrclear( x->feedfunclen * sizeof(float) );
-	x->feedfunc2 = (float *) sysmem_newptrclear( x->feedfunclen * sizeof(float) );
-	x->feedfunc3 = (float *) sysmem_newptrclear( x->feedfunclen * sizeof(float) );
-	x->feedfunc4 = (float *) sysmem_newptrclear( x->feedfunclen * sizeof(float) );
-	x->flamfunc1len = 8192 ;
-	x->flamfunc1 = (float *) sysmem_newptrclear( x->flamfunc1len * sizeof(float));
+    for(i = 0; i < x->overlap_max; i++){
+        x->events[i].transfer_function = (float *) sysmem_newptrclear(x->tf_len * sizeof(float));
+    }
+	x->feedfunclen = 8192;
+    for(i=0; i < x->overlap_max; i++){
+        x->events[i].feedfunc1 = (float *) sysmem_newptrclear((x->feedfunclen + BUF_PAD) * sizeof(float));
+        x->events[i].feedfunc2 = (float *) sysmem_newptrclear((x->feedfunclen + BUF_PAD) * sizeof(float));
+        x->events[i].feedfunc3 = (float *) sysmem_newptrclear((x->feedfunclen + BUF_PAD) * sizeof(float));
+        x->events[i].feedfunc4 = (float *) sysmem_newptrclear((x->feedfunclen + BUF_PAD) * sizeof(float));
+    }
+	x->flamfunc1len = 8192;
+	x->flamfunc1 = (float *) sysmem_newptrclear((x->flamfunc1len) * sizeof(float));
 	setflamfunc1(x->flamfunc1,x->flamfunc1len);
 	x->max_comb_lpt = 0.15 ;// watch out here
-	x->combies = (CMIXCOMB *) sysmem_newptrclear(4 * sizeof(CMIXCOMB));
-    x->resies = (CMIXRESON *) sysmem_newptrclear(4 * sizeof(CMIXRESON));
-	for( i = 0; i < 4; i++ ){
-		x->combies[i].len = x->sr * x->max_comb_lpt + 2;
-		x->combies[i].arr = (float *) sysmem_newptrclear(x->combies[i].len * sizeof(float));
-	}
-	x->adsr = (CMIXADSR *) sysmem_newptrclear(1 * sizeof(CMIXADSR));
-	x->adsr->len = 32768 ;
-	x->adsr->func = (float *) sysmem_newptrclear(x->adsr->len * sizeof(float) );
+    for(i = 0; i < x->overlap_max; i++){
+        x->events[i].combies = (CMIXCOMB **) sysmem_newptrclear(4 * sizeof(CMIXCOMB *));
+        for(j = 0; j < 4; j++ ){
+            x->events[i].combies[j] = (CMIXCOMB *) sysmem_newptrclear(4 * sizeof(CMIXCOMB));
+            x->events[i].combies[j]->len = x->sr * x->max_comb_lpt + 2;
+            x->events[i].combies[j]->arr = (float *) sysmem_newptrclear(x->events[i].combies[j]->len * sizeof(float));
+        }
+    }
+    for(i = 0; i < x->overlap_max; i++){
+        x->events[i].resies = (CMIXRESON **)sysmem_newptrclear(4 * sizeof(CMIXRESON *));
+        for(j = 0; j < 4; j++ ){
+            x->events[i].resies[j] = (CMIXRESON *)sysmem_newptrclear(4 * sizeof(CMIXRESON));
+        }
+    }
+    //x->adsr->len = 32768;
+    //x->adsr->func = (float *) sysmem_newptrclear(x->adsr->len * sizeof(float));
+    for(i = 0; i < x->overlap_max; i++){
+        x->events[i].adsr = (CMIXADSR *)sysmem_newptrclear(sizeof(CMIXADSR));
+        x->events[i].adsr->len = 32768;
+        x->events[i].adsr->func = (float *)sysmem_newptrclear(x->events[i].adsr->len * sizeof(float));
+    }
+	// x->adsr = (CMIXADSR *) sysmem_newptrclear(1 * sizeof(CMIXADSR));
 	x->dcflt = (float *) sysmem_newptrclear(16 * sizeof(float));
 	x->tcycle.data = (float *) sysmem_newptrclear(CYCLE_MAX * sizeof(float));
 	x->tcycle.len = 0;
-	for(i=0;i<x->overlap_max;i++){
+	for(i=0; i<x->overlap_max; i++){
 		x->events[i].phasef = x->events[i].phase = 0.0;
 	}
     x->qelem = qelem_new(x, (method)bashfest_deploy_dsp);
@@ -420,25 +437,23 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	membytes += MAX_PARAMETERS * sizeof(float);
 	membytes += 64 * sizeof(float);
 	membytes += x->buf_samps * sizeof(float) * x->overlap_max;
-	membytes += x->maxdelay * x->sr * sizeof(float) * 2;
-	membytes += MAXSECTS * sizeof(LSTRUCT);
-	membytes += ((int)(x->sr * x->max_mini_delay) + 1)  * sizeof(float) * 4;
+	membytes += ((x->maxdelay * x->sr * 2) + BUF_PAD) * x->overlap_max * sizeof(float);
+	membytes += MAXSECTS * sizeof(LSTRUCT) * x->overlap_max;
+	membytes += ((int)(x->sr * x->max_mini_delay) + BUF_PAD) * 4 * x->overlap_max * sizeof(float);
 	membytes += 16 * sizeof(float);
 	membytes += MAXFILTER * sizeof(float *);
 	membytes += MAX_COEF * sizeof(float) * MAXFILTER;
 	membytes += x->tf_len * sizeof(float);
-	membytes += x->feedfunclen * sizeof(float) * 4;
+	membytes += x->feedfunclen * sizeof(float) * 4 * x->overlap_max;
 	membytes += x->flamfunc1len * sizeof(float);
-	membytes += 4 * sizeof(CMIXCOMB);
-	membytes += x->combies[0].len * sizeof(float) * 4;
+	membytes += 4 * sizeof(CMIXCOMB) * x->overlap_max;
+	membytes += x->events[0].combies[0]->len * x->overlap_max * sizeof(float) * 4;
 	membytes += sizeof(CMIXADSR);
-	membytes += x->adsr->len * sizeof(float);
+	membytes += x->events[0].adsr->len * sizeof(float);
 	membytes += 16 * sizeof(float);
 	membytes += CYCLE_MAX * sizeof(float);
-	
-	// post("total memory for this bashfest %.2f MBytes",(float)membytes/1000000.);
+    membytes += x->tf_len * sizeof(float) * x->overlap_max;
     x->memcnt = (float)membytes/1000000.0;
-	/* be sure to finish clearing memory */
 	set_dcflt(x->dcflt);
 	init_reverb_data(x->reverb_ellipse_data);
 	init_ellipse_data(x->ellipse_data);
@@ -458,50 +473,71 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 
 void bashfest_dsp_free(t_bashfest *x)
 {
-	int i;
+	int i,j;
     if (!x) return;
     x->hosed = 1;
     if (x->qelem) {
         qelem_free(x->qelem);
     }
-	dsp_free((t_pxobject *)x);
+    dsp_free((t_pxobject *)x);
     // stop all events in case defer is running at low thread priority
     for(i = 0; i < x->overlap_max; i++){
         x->events[i].status = INACTIVE;
     }
-    
     for(i=0;i<x->overlap_max;i++){
-        sysmem_freeptr(x->events[i].workbuffer);
+        if(x->events[i].workbuffer){
+            sysmem_freeptr(x->events[i].workbuffer);
+            x->events[i].workbuffer = NULL;
+        }
     }
 	sysmem_freeptr(x->events);
 	sysmem_freeptr(x->sinewave);
 	sysmem_freeptr(x->params);
 	sysmem_freeptr(x->odds);
-
-	sysmem_freeptr(x->delayline1);
-	sysmem_freeptr(x->delayline2);
-	sysmem_freeptr(x->eel);
-	for( i = 0; i < 4 ; i++ ){
-		sysmem_freeptr(x->mini_delay[i]);
-	}
-	sysmem_freeptr(x->reverb_ellipse_data);
+    for(i=0; i < x->overlap_max; i++){
+        sysmem_freeptr(x->events[i].eel);
+    }
+    for(i=0; i < x->overlap_max; i++){
+        sysmem_freeptr(x->events[i].delayline1);
+        sysmem_freeptr(x->events[i].delayline2);
+    }
+    for( i = 0; i < x->overlap_max ; i++ ){
+        for(j = 0; j < 4; j++){
+            sysmem_freeptr(x->events[i].mini_delay[j]);
+        }
+        sysmem_freeptr(x->events[i].mini_delay); // free pointers
+    }
 	for(i=0;i<MAXFILTER;i++){
-		sysmem_freeptr(x->ellipse_data[i] );
+		sysmem_freeptr(x->ellipse_data[i]);
 	}
     sysmem_freeptr(x->ellipse_data);
-	sysmem_freeptr(x->transfer_function);
-	sysmem_freeptr(x->feedfunc1);
-	sysmem_freeptr(x->feedfunc2);
-	sysmem_freeptr(x->feedfunc3);
-	sysmem_freeptr(x->feedfunc4);
+    for(i=0; i < x->overlap_max; i++){
+        sysmem_freeptr(x->events[i].transfer_function);
+    }
+    for(i = 0; i < x->overlap_max; i++){
+        sysmem_freeptr(x->events[i].feedfunc1);
+        sysmem_freeptr(x->events[i].feedfunc2);
+        sysmem_freeptr(x->events[i].feedfunc3);
+        sysmem_freeptr(x->events[i].feedfunc4);
+    }
 	sysmem_freeptr(x->flamfunc1);
-	for( i = 0; i < 4; i++ ){
-		sysmem_freeptr(x->combies[i].arr);
-	}
-    sysmem_freeptr(x->combies);
-    sysmem_freeptr(x->resies);
-	sysmem_freeptr(x->adsr->func);
-	sysmem_freeptr(x->adsr);
+    for(i = 0; i < x->overlap_max; i++){
+        for(j = 0; j < 4; j++){
+            sysmem_freeptr(x->events[i].combies[j]->arr);
+            sysmem_freeptr(x->events[i].combies[j]);
+        }
+        sysmem_freeptr(x->events[i].combies);
+    }
+    for(i = 0; i < x->overlap_max; i++){
+        for(j = 0; j < 4; j++){
+            sysmem_freeptr(x->events[i].resies[j]);
+        }
+        sysmem_freeptr(x->events[i].resies);
+    }
+    for(i = 0; i < x->overlap_max; i++){
+        sysmem_freeptr(x->events[i].adsr->func);
+        sysmem_freeptr(x->events[i].adsr);
+    }
 	sysmem_freeptr(x->dcflt);
 	sysmem_freeptr(x->tcycle.data);
     if (x->buffer_ref){

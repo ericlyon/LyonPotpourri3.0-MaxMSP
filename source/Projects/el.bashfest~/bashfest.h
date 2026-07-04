@@ -61,6 +61,19 @@ typedef struct
 		int countdown;//latency counter before we actually start sending out samples
 		int out_channels; //number of channels per frame of output
 		short completed;//did the defer call do its thing?
+        // additional members for per-slot DSP service
+        LSTRUCT *eel; // handle all elliptical filters
+        float *feedfunc1; // feedback functions
+        float *feedfunc2;
+        float *feedfunc3;
+        float *feedfunc4;
+        float *transfer_function; // for compdistort
+        float **mini_delay; // small delay lines for allpass filter (we need 4 of them)
+        float *delayline1;
+        float *delayline2;
+        CMIXCOMB **combies; // comb filters (we need 4 of them)
+        CMIXRESON **resies; // resonant filters (we need 4 of them)
+        CMIXADSR *adsr;
 	} t_event;
 
 typedef struct _bashfest
@@ -69,8 +82,6 @@ typedef struct _bashfest
         t_buffer_ref *buffer_ref; // MSP reference to the buffer
         void *qelem; // for scheduling DSP routine offline
         int already_failed; // flag to send bad buffer message just one time
-
-//		t_buffer *wavebuf; // holds waveform samples
 		float sr; // sampling rate
 		t_symbol *wavename; // name of waveform buffer
 		short hosed; // buffers are bad
@@ -103,38 +114,23 @@ typedef struct _bashfest
 		short grab;//flag to copy immediate processed buffer into MSP buffer
 		char sound_name[256];
 		float *trigger_vec;//stores incoming trigger vectors
-		
-		//  int tb_inpt;//where we put the incoming trigger vector
-		//  int tb_outpt;//where we read the outgoing trigger vector
 		int vs;//Max/MSP vector size
-		
 		/* stuff for bashfest DSP */
-		float *sinewave;
+		float *sinewave; // only one version of this table, and it is read-only
 		int sinelen;
 		short mute;
 		float maxdelay;
-		float *delayline1;
-		float *delayline2;
-		LSTRUCT *eel; // for ellipse processor
-		float *mini_delay[4]; // small delay lines for allpass filter
 		float max_mini_delay ;
-		float *transfer_function;
 		int tf_len; // length of transfer function
-		float *feedfunc1;
-		float *feedfunc2;
-		float *feedfunc3;
-		float *feedfunc4;
 		int feedfunclen;
 		int flamfunc1len;
-		float *flamfunc1;
-		CMIXCOMB *combies;
-		CMIXADSR *adsr;
+		float *flamfunc1; // only one version of this function, and it is read-only
+		// CMIXADSR *adsr;
 		float max_comb_lpt;
 		float *reverb_ellipse_data;
 		float **ellipse_data;
 		float *dcflt;
 		CMIXOSC oscar;
-		CMIXRESON *resies;
         float memcnt;  // size of the bashfest~ memory in MB
 	} t_bashfest;
 
@@ -165,8 +161,7 @@ float ellipse(float x, LSTRUCT *eel, int nsects, float xnorm);
 float allpass(float samp,float *a);
 void init_reverb_data(float *a);
 void init_ellipse_data(float **a);
-void killdc( float *inbuf, int in_frames, int channels, t_bashfest *x);
-
+void killdc( float *inbuf, int in_frames, int channels, LSTRUCT *eel, t_bashfest *x);
 void setExpFlamFunc(float *arr, int flen, float v1,float v2,float alpha);
 void setflamfunc1(float *arr, int flen);
 void funcgen1(float *outArray, int outlen, float duration, float outMin, float outMax,
@@ -184,8 +179,8 @@ void do_compdist(float *in,float *out,int sampFrames,int nchans,int channel,
 float getmaxamp(float *arr, int len);
 void buildadsr(CMIXADSR *a);
 /*bashfest dsp functions */
-void feed1(float *inbuf, float *outbuf, int in_frames, int out_frames,int channels, float *functab1,
-		   float *functab2,float *functab3,float *functab4,int funclen, 
-		   float duration, float maxDelay, t_bashfest *x);
-void reverb1me(float *in, float *out, int inFrames, int out_frames, int nchans, 
-			   int channel, float revtime, float dry, t_bashfest *x);
+void feed1(float *inbuf, float *outbuf, int in_frames, int out_frames, int channels, float *functab1,
+           float *functab2, float *functab3, float *functab4, int funclen,
+           float duration, float maxDelay, float **mini_delay, t_bashfest *x);
+void reverb1me(float *in, float *out, int inFrames, int out_frames, int nchans,
+               int channel, float revtime, float dry, LSTRUCT *eel, float **alpo, t_bashfest *x);

@@ -259,10 +259,10 @@ void init_reverb_data(float *a)
 }
 
 void reverb1me(float *in, float *out, int inFrames, int out_frames, int nchans, 
-			   int channel, float revtime, float dry, t_bashfest *x)
+			   int channel, float revtime, float dry, LSTRUCT *eel, float **alpo, t_bashfest *x)
 {
 	float dels[4];// stick into main structure
-	float **alpo = x->mini_delay ;
+	// float **alpo = x->mini_delay ;
 	float a1,a2,a3,a4;
 	int i;
 	//  int alsmp ;
@@ -270,7 +270,7 @@ void reverb1me(float *in, float *out, int inFrames, int out_frames, int nchans,
 	
 	int nsects;
 	float xnorm;
-	LSTRUCT *eel = x->eel;
+	// LSTRUCT *eel = x->eel;
 	
 	float wet;
 	//  float max;
@@ -311,7 +311,7 @@ void reverb1me(float *in, float *out, int inFrames, int out_frames, int nchans,
 		
 		out[i] = in[i] * dry + ellipse((a1+a2+a3+a4), eel, nsects,xnorm) * wet;
 	}
-	
+	// reverb tail
 	for( i = channel + inFrames * nchans; i < out_frames * nchans; i += nchans ){
 		
 		a1 = allpass(0.0, alpo[0]);
@@ -320,100 +320,21 @@ void reverb1me(float *in, float *out, int inFrames, int out_frames, int nchans,
 		a4 = allpass(0.0, alpo[3]); 
 		
 		out[i] =  ellipse((a1+a2+a3+a4), eel, nsects,xnorm) * wet;
-		
 	}
-	
 }
 
-/*
-void feed1(float *inbuf, float *outbuf, int in_frames, int out_frames,int channels, float *functab1,
-		   float *functab2,float *functab3,float *functab4,int funclen, 
-		   float duration, float maxDelay, t_bashfest *x)
-{
-	int i;
-	float srate = x->sr;
-	float *delayLine1a = x->mini_delay[0];
-	float *delayLine2a = x->mini_delay[1];
-	float *delayLine1b = x->mini_delay[2];
-	float *delayLine2b = x->mini_delay[3];
-	int dv1a[2], dv2a[2];		// cmix bookkeeping
-	int dv1b[2], dv2b[2];		// cmix bookkeeping
-	float delsamp1a=0, delsamp2a=0 ;
-	float delsamp1b=0, delsamp2b=0 ;
-	float delay1, delay2, feedback1, feedback2;
-	float funcSi, funcPhs;
-	float putsamp;
-	
 
-	
-	funcPhs = 0.;
-	
-	// read once during note
-	
-	
-	funcSi = ((float) funclen / srate) / duration ;
-	
-	
-	delset2(delayLine1a, dv1a, maxDelay,srate);
-	delset2(delayLine2a, dv2a, maxDelay,srate);
-	
-	if( channels == 2 ){
-		delset2(delayLine1b, dv1b, maxDelay,srate);
-		delset2(delayLine2b, dv2b, maxDelay,srate);
-	}
-	
-	
-	for(i = 0; i < out_frames*channels; i += channels ){
-		// buffer loop 
-		
-		delay1 = functab1[ (int) funcPhs ];
-		delay2 = functab2[ (int) funcPhs ];
-		feedback1 = functab3[ (int) funcPhs ];
-		feedback2 = functab4[ (int) funcPhs ];
-		
-		funcPhs += funcSi;
-		if( funcPhs >= (float) funclen )
-			funcPhs = 0;
-		
-		putsamp = i < in_frames * channels ? inbuf[i] + delsamp1a*feedback1 : 0.0;
-		outbuf[i] = putsamp; // zero instead ??
-		
-		delput2( putsamp, delayLine1a, dv1a);
-		delsamp1a = dliget2(delayLine1a, delay1, dv1a,srate);
-		
-		putsamp = delsamp1a+delsamp2a*feedback2 ;
-		
-		delput2( putsamp, delayLine2a, dv2a);
-		delsamp2a = dliget2(delayLine2a, delay2, dv2a, srate);
-		outbuf[i] += delsamp2a;
-		
-		
-		if( channels == 2 ){
-			putsamp = i < in_frames * channels ? inbuf[i+1] + delsamp1a*feedback1 : 0.0;
-			outbuf[i+1] = putsamp;
-			delput2( putsamp, delayLine1b, dv1b);
-			delsamp1b = dliget2(delayLine1b, delay1, dv1b, srate);
-			putsamp = delsamp1b+delsamp2b*feedback2;
-			delput2( putsamp, delayLine2b, dv2b);
-			delsamp2b = dliget2(delayLine2b, delay2, dv2b, srate);
-			outbuf[i+1] += delsamp2b;
-		}
-		
-	}
-	
-}
-*/
 
 void feed1(float *inbuf, float *outbuf, int in_frames, int out_frames, int channels, float *functab1,
            float *functab2, float *functab3, float *functab4, int funclen,
-           float duration, float maxDelay, t_bashfest *x)
+           float duration, float maxDelay, float **mini_delay, t_bashfest *x)
 {
     int i;
     float srate = x->sr;
-    float *delayLine1L = x->mini_delay[0];
-    float *delayLine2L = x->mini_delay[1];
-    float *delayLine1R = x->mini_delay[2];
-    float *delayLine2R = x->mini_delay[3];
+    float *delayLine1L = mini_delay[0];
+    float *delayLine2L = mini_delay[1];
+    float *delayLine1R = mini_delay[2];
+    float *delayLine2R = mini_delay[3];
     int dv1L[2], dv2L[2], dv1R[2], dv2R[2];
     float delsamp1L=0, delsamp2L=0, delsamp1R=0, delsamp2R=0;
     float delay1, delay2, feedback1, feedback2;
@@ -551,10 +472,10 @@ float oscil(float amp,float si,float *farray,int len,float *phs)
 	return(*(farray+i) * amp);
 }
 
-void killdc( float *inbuf, int in_frames, int channels, t_bashfest *x)
+void killdc(float *inbuf, int in_frames, int channels, LSTRUCT *eel, t_bashfest *x)
 {
 	int i,j=1;
-	LSTRUCT *eel = x->eel;
+	// LSTRUCT *eel = x->eel;
 	int nsects;
 	float xnorm;
 	float *dcflt = x->dcflt;
@@ -571,6 +492,8 @@ void killdc( float *inbuf, int in_frames, int channels, t_bashfest *x)
 		
 		for( i = j; i < in_frames * channels ; i += channels ){
 			inbuf[i] = ellipse(inbuf[i], eel, nsects,xnorm);
+            // denormals protection
+            if ((inbuf[i] > -1.0e-15f) && (inbuf[i] < 1.0e-15f)) inbuf[i] = 0.0f;
 		}
 	}
 }

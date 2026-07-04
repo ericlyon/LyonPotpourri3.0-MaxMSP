@@ -182,23 +182,23 @@ void comber(t_bashfest *x, int slot, int *pcount)
     int out_frames = in_frames + (int)(overhang * srate);
     if (out_frames * channels > x->halfbuffer) out_frames = x->halfbuffer / channels;
 
-    mycombset(delay, revtime, 0, x->delayline1, srate);
-    if (channels == 2) mycombset(delay, revtime, 0, x->delayline2, srate);
+    mycombset(delay, revtime, 0, event->delayline1, srate);
+    if (channels == 2) mycombset(delay, revtime, 0, event->delayline2, srate);
     
     for (i = 0; i < out_frames; i++) {
         if (outbuf + channels > out_limit) { out_frames = i; break; }
         if (i < in_frames) {
             if (channels == 1) {
                 float insamp = *inbuf++;
-                *outbuf++ = insamp + mycomb(insamp, x->delayline1);
+                *outbuf++ = insamp + mycomb(insamp, event->delayline1);
             } else {
                 float insL = *inbuf++; float insR = *inbuf++;
-                *outbuf++ = insL + mycomb(insL, x->delayline1);
-                *outbuf++ = insR + mycomb(insR, x->delayline2);
+                *outbuf++ = insL + mycomb(insL, event->delayline1);
+                *outbuf++ = insR + mycomb(insR, event->delayline2);
             }
         } else {
-            if (channels == 1) *outbuf++ = mycomb(0.0f, x->delayline1);
-            else { *outbuf++ = mycomb(0.0f, x->delayline1); *outbuf++ = mycomb(0.0f, x->delayline2); }
+            if (channels == 1) *outbuf++ = mycomb(0.0f, event->delayline1);
+            else { *outbuf++ = mycomb(0.0f, event->delayline1); *outbuf++ = mycomb(0.0f, event->delayline2); }
         }
     }
 
@@ -247,8 +247,8 @@ void flange(t_bashfest *x, int slot, int *pcount)
     maxdel = 1.0f / (minres > 0 ? minres : 1.0f);
     if( maxdel > x->maxdelay * 0.95f ) maxdel = x->maxdelay * 0.95f;
 
-    delset2(x->delayline1, dv1, x->maxdelay, x->sr);
-    if( channels == 2 ) delset2(x->delayline2, dv2, x->maxdelay, x->sr);
+    delset2(event->delayline1, dv1, x->maxdelay, x->sr);
+    if( channels == 2 ) delset2(event->delayline2, dv2, x->maxdelay, x->sr);
     
     si = ((float) x->sinelen / x->sr) * speed;
     phase *= x->sinelen;
@@ -264,25 +264,25 @@ void flange(t_bashfest *x, int slot, int *pcount)
         if (i < event->sample_frames) {
             if( channels == 1 ){
                 float insamp = *inbuf++;
-                delput2( insamp + delsamp1 * feedback, x->delayline1, dv1);
-                delsamp1 = dliget2(x->delayline1, delay_time, dv1, x->sr);
+                delput2( insamp + delsamp1 * feedback, event->delayline1, dv1);
+                delsamp1 = dliget2(event->delayline1, delay_time, dv1, x->sr);
                 *outbuf++ = insamp + delsamp1;
             } else {
                 float insL = *inbuf++; float insR = *inbuf++;
-                delput2( insL + delsamp1 * feedback, x->delayline1, dv1);
-                delsamp1 = dliget2(x->delayline1, delay_time, dv1, x->sr);
+                delput2( insL + delsamp1 * feedback, event->delayline1, dv1);
+                delsamp1 = dliget2(event->delayline1, delay_time, dv1, x->sr);
                 *outbuf++ = insL + delsamp1;
-                delput2( insR + delsamp2 * feedback, x->delayline2, dv2);
-                delsamp2 = dliget2(x->delayline2, delay_time, dv2, x->sr);
+                delput2( insR + delsamp2 * feedback, event->delayline2, dv2);
+                delsamp2 = dliget2(event->delayline2, delay_time, dv2, x->sr);
                 *outbuf++ = insR + delsamp2;
             }
         } else {
             // Hangover loop
-            delput2( delsamp1 * feedback, x->delayline1, dv1);
-            *outbuf++ = delsamp1 = dliget2(x->delayline1, delay_time, dv1, x->sr);
+            delput2( delsamp1 * feedback, event->delayline1, dv1);
+            *outbuf++ = delsamp1 = dliget2(event->delayline1, delay_time, dv1, x->sr);
             if( channels == 2 ) {
-                delput2( delsamp2 * feedback, x->delayline2, dv2);
-                *outbuf++ = delsamp2 = dliget2(x->delayline2, delay_time, dv2, x->sr);
+                delput2( delsamp2 * feedback, event->delayline2, dv2);
+                *outbuf++ = delsamp2 = dliget2(event->delayline2, delay_time, dv2, x->sr);
             }
         }
     }
@@ -505,8 +505,8 @@ void slidecomb(t_bashfest *x, int slot, int *pcount)
     if (delay1 > x->maxdelay * 0.95f) delay1 = x->maxdelay * 0.95f;
     if (delay2 > x->maxdelay * 0.95f) delay2 = x->maxdelay * 0.95f;
 
-    delset2(x->delayline1, dv1, x->maxdelay, srate);
-    if (channels == 2) delset2(x->delayline2, dv2, x->maxdelay, srate);
+    delset2(event->delayline1, dv1, x->maxdelay, srate);
+    if (channels == 2) delset2(event->delayline2, dv2, x->maxdelay, srate);
     
     for (i = 0; i < out_frames; i++) {
         if (outbuf + channels > out_limit) { out_frames = i; break; }
@@ -517,24 +517,24 @@ void slidecomb(t_bashfest *x, int slot, int *pcount)
         if (i < in_frames) {
             if (channels == 1) {
                 float ins = *inbuf++;
-                delput2(ins + delsamp1 * feedback, x->delayline1, dv1);
-                delsamp1 = dliget2(x->delayline1, delay_time, dv1, srate);
+                delput2(ins + delsamp1 * feedback, event->delayline1, dv1);
+                delsamp1 = dliget2(event->delayline1, delay_time, dv1, srate);
                 *outbuf++ = ins + delsamp1;
             } else {
                 float insL = *inbuf++; float insR = *inbuf++;
-                delput2(insL + delsamp1 * feedback, x->delayline1, dv1);
-                delsamp1 = dliget2(x->delayline1, delay_time, dv1, srate);
+                delput2(insL + delsamp1 * feedback, event->delayline1, dv1);
+                delsamp1 = dliget2(event->delayline1, delay_time, dv1, srate);
                 *outbuf++ = insL + delsamp1;
-                delput2(insR + delsamp2 * feedback, x->delayline2, dv2);
-                delsamp2 = dliget2(x->delayline2, delay_time, dv2, srate);
+                delput2(insR + delsamp2 * feedback, event->delayline2, dv2);
+                delsamp2 = dliget2(event->delayline2, delay_time, dv2, srate);
                 *outbuf++ = insR + delsamp2;
             }
         } else {
-            delput2(delsamp1 * feedback, x->delayline1, dv1);
-            *outbuf++ = delsamp1 = dliget2(x->delayline1, delay_time, dv1, srate);
+            delput2(delsamp1 * feedback, event->delayline1, dv1);
+            *outbuf++ = delsamp1 = dliget2(event->delayline1, delay_time, dv1, srate);
             if (channels == 2) {
-                delput2(delsamp2 * feedback, x->delayline2, dv2);
-                *outbuf++ = delsamp2 = dliget2(x->delayline2, delay_time, dv2, srate);
+                delput2(delsamp2 * feedback, event->delayline2, dv2);
+                *outbuf++ = delsamp2 = dliget2(event->delayline2, delay_time, dv2, srate);
             }
         }
     }
@@ -578,7 +578,7 @@ void reverb1(t_bashfest *x, int slot, int *pcount)
 
     memset(outbuf, 0, out_frames * channels * sizeof(float));
     for (int j = 0; j < channels; j++) { // Fixed: use 'j'
-        reverb1me(inbuf, outbuf, event->sample_frames, out_frames, channels, j, revtime, drygain, x);
+        reverb1me(inbuf, outbuf, event->sample_frames, out_frames, channels, j, revtime, drygain, event->eel, event->mini_delay, x);
     }
 
     event->sample_frames = out_frames;
@@ -595,25 +595,22 @@ void ellipseme(t_bashfest *x, int slot, int *pcount)
     ++(*pcount);
     int filtercode = (int)x->params[(*pcount)++];
     if (event->sample_frames <= 0) return;
-
     int in_start = event->in_start;
     int out_start = (in_start + x->halfbuffer) % x->buf_samps;
     float *inbuf = event->workbuffer + in_start;
     float *outbuf = event->workbuffer + out_start;
     int channels = event->out_channels;
-
     int frames = event->sample_frames;
     if (frames * channels > x->halfbuffer) frames = x->halfbuffer / channels;
-
     if (filtercode < 0 || filtercode >= ELLIPSE_FILTER_COUNT) {
         memcpy(outbuf, inbuf, frames * channels * sizeof(float));
     } else {
         float *fltdata = x->ellipse_data[filtercode];
         for (j = 0; j < channels; j++) {
             // Re-initializing resets the history in x->eel
-            ellipset(fltdata, x->eel, &nsects, &xnorm);
+            ellipset(fltdata, event->eel, &nsects, &xnorm);
             for (i = j; i < frames * channels; i += channels) {
-                outbuf[i] = ellipse(inbuf[i], x->eel, nsects, xnorm);
+                outbuf[i] = ellipse(inbuf[i], event->eel, nsects, xnorm);
             }
         }
     }
@@ -654,25 +651,25 @@ void feed1me(t_bashfest *x, int slot, int *pcount)
     // 2. Generate 4 LFO Tables
     // CRITICAL FIX: reset phz1/phz2 before each call or funcgen1 will explode indices
     phz1 = 0.13f; phz2 = 0.251f;
-    funcgen1(x->feedfunc1, x->feedfunclen, desired_dur, mindelay, maxdelay,
+    funcgen1(event->feedfunc1, x->feedfunclen, desired_dur, mindelay, maxdelay,
              speed1, speed2, 1.0f, 1.0f, &phz1, &phz2, x->sinewave, x->sinelen);
     
     phz1 = 0.35f; phz2 = 0.12f;
-    funcgen1(x->feedfunc2, x->feedfunclen, desired_dur, mindelay*0.5f, maxdelay*2.0f,
+    funcgen1(event->feedfunc2, x->feedfunclen, desired_dur, mindelay*0.5f, maxdelay*2.0f,
              speed1*1.25f, speed2*0.75f, 1.0f, 1.0f, &phz1, &phz2, x->sinewave, x->sinelen);
     
     phz1 = 0.61f; phz2 = 0.93f;
-    funcgen1(x->feedfunc3, x->feedfunclen, desired_dur, 0.1f, 0.7f,
+    funcgen1(event->feedfunc3, x->feedfunclen, desired_dur, 0.1f, 0.7f,
              speed1*0.35f, speed2*1.25f, 1.0f, 1.0f, &phz1, &phz2, x->sinewave, x->sinelen);
     
     phz1 = 0.22f; phz2 = 0.44f;
-    funcgen1(x->feedfunc4, x->feedfunclen, desired_dur, 0.1f, 0.7f,
+    funcgen1(event->feedfunc4, x->feedfunclen, desired_dur, 0.1f, 0.7f,
              speed1*0.55f, speed2*2.25f, 1.0f, 1.0f, &phz1, &phz2, x->sinewave, x->sinelen);
     
     // 3. Process the Feedback Delay Network
     feed1(inbuf, outbuf, event->sample_frames, out_frames, channels,
-          x->feedfunc1, x->feedfunc2, x->feedfunc3, x->feedfunc4,
-          x->feedfunclen, desired_dur, x->max_mini_delay, x);
+          event->feedfunc1, event->feedfunc2, event->feedfunc3, event->feedfunc4,
+          x->feedfunclen, desired_dur, x->max_mini_delay, event->mini_delay, x);
     
     // 4. Update Event State
     event->sample_frames = out_frames;
@@ -728,7 +725,6 @@ void flam1(t_bashfest *x, int slot, int *pcount)
         gain = (i == 0) ? gain2 : gain * gainatten;
         if (gain < 0.0001f) break;
     }
-
     event->sample_frames = out_frames;
     event->out_start = in_start;
     event->in_start = out_start;
@@ -821,10 +817,10 @@ void expflam(t_bashfest *x, int slot, int *pcount)
 
     if (attacks <= 1) attacks = 2;
     if (attacks > x->feedfunclen) attacks = x->feedfunclen;
-    setExpFlamFunc(x->feedfunc1, attacks, delay1, delay2, slope);
+    setExpFlamFunc(event->feedfunc1, attacks, delay1, delay2, slope);
 
     float total_t = 0;
-    for (i = 0; i < attacks - 1; i++) total_t += x->feedfunc1[i];
+    for (i = 0; i < attacks - 1; i++) total_t += event->feedfunc1[i];
     
     int out_frames = in_frames + (int)(x->sr * total_t);
     if (out_frames * channels > x->halfbuffer) out_frames = x->halfbuffer / channels;
@@ -850,7 +846,7 @@ void expflam(t_bashfest *x, int slot, int *pcount)
                 outbuf[off + j * channels + k] += inbuf[j * channels + k] * gain;
         }
         
-        if (i < attacks - 1) time_acc += x->feedfunc1[i];
+        if (i < attacks - 1) time_acc += event->feedfunc1[i];
         gain = (i == 0) ? gain2 : gain * gainatten;
         if (gain < 0.0001f) break;
     }
@@ -883,9 +879,9 @@ void comb4(t_bashfest *x, int slot, int *pcount)
         rez = x->params[(*pcount)++];
         if (rez < 10.0f) rez = 10.0f; // Minimum 10Hz resonance
         
-        x->combies[j].lpt = 1.0f / rez;
-        if (x->combies[j].lpt > x->max_comb_lpt) {
-            x->combies[j].lpt = x->max_comb_lpt;
+        event->combies[j]->lpt = 1.0f / rez;
+        if (event->combies[j]->lpt > x->max_comb_lpt) {
+            event->combies[j]->lpt = x->max_comb_lpt;
         }
     }
     
@@ -905,7 +901,7 @@ void comb4(t_bashfest *x, int slot, int *pcount)
     for (j = 0; j < channels; j++) {
         // Initialize/Clear the 4 combs for this channel PASS
         for (k = 0; k < 4; k++) {
-            mycombset(x->combies[k].lpt, revtime, 0, x->combies[k].arr, x->sr);
+            mycombset(event->combies[k]->lpt, revtime, 0, event->combies[k]->arr, x->sr);
         }
 
         // Process frames
@@ -915,7 +911,7 @@ void comb4(t_bashfest *x, int slot, int *pcount)
             float summed_combs = 0.0f;
             
             for (k = 0; k < 4; k++) {
-                summed_combs += mycomb(input_sample, x->combies[k].arr);
+                summed_combs += mycomb(input_sample, event->combies[k]->arr);
             }
             outbuf_start[i * channels + j] = summed_combs;
         }
@@ -935,7 +931,7 @@ void comb4(t_bashfest *x, int slot, int *pcount)
     }
 
     // 5. Cleanup and State Update
-    killdc(outbuf_start, out_frames, channels, x);
+    killdc(outbuf_start, out_frames, channels, event->eel, x);
     event->sample_frames = out_frames;
     event->out_start = in_start;
     event->in_start = out_start;
@@ -961,11 +957,11 @@ void compdist(t_bashfest *x, int slot, int *pcount)
     if (frames * channels > x->halfbuffer) frames = x->halfbuffer / channels;
 
     maxamp = getmaxamp(inbuf, frames * channels);
-    if(lookupflag) set_distortion_table(x->transfer_function, cutoff, maxmult, x->tf_len);
+    if(lookupflag) set_distortion_table(event->transfer_function, cutoff, maxmult, x->tf_len);
     
     if (maxamp > 0.0001f) {
         for (int j = 0; j < channels; j++) {
-            do_compdist(inbuf, outbuf, frames, channels, j, cutoff, maxmult, lookupflag, x->transfer_function, x->tf_len, maxamp);
+            do_compdist(inbuf, outbuf, frames, channels, j, cutoff, maxmult, lookupflag, event->transfer_function, x->tf_len, maxamp);
         }
     } else {
         memcpy(outbuf, inbuf, frames * channels * sizeof(float));
@@ -998,8 +994,8 @@ void ringfeed(t_bashfest *x, int slot, int *pcount)
     if (lpt > x->max_comb_lpt) lpt = x->max_comb_lpt;
 
     for (int j = 0; j < channels; j++) {
-        mycombset(lpt, (rvbt < 1 ? rvbt : 0.99f), 0, x->combies[j].arr, x->sr);
-        rsnset2(reson_cf, reson_cf * reson_bw_fac, 2.0f, 0, x->resies[j].q, x->sr);
+        mycombset(lpt, (rvbt < 1 ? rvbt : 0.99f), 0, event->combies[j]->arr, x->sr);
+        rsnset2(reson_cf, reson_cf * reson_bw_fac, 2.0f, 0, event->resies[j]->q, x->sr);
     }
 
     int out_frames = event->sample_frames + (int)(overhang * x->sr);
@@ -1008,8 +1004,8 @@ void ringfeed(t_bashfest *x, int slot, int *pcount)
         float mod = oscil(1.0f, lfo_si, x->sinewave, x->sinelen, &lfo_phs);
         for (int j = 0; j < channels; j++) {
             float sig = (i < event->sample_frames) ? inbuf[i * channels + j] * mod : 0;
-            sig = sig + mycomb(sig, x->combies[j].arr);
-            outbuf[i * channels + j] = reson(sig, x->resies[j].q);
+            sig = sig + mycomb(sig, event->combies[j]->arr);
+            outbuf[i * channels + j] = reson(sig, event->resies[j]->q);
         }
     }
     event->sample_frames = out_frames;
@@ -1020,7 +1016,7 @@ void ringfeed(t_bashfest *x, int slot, int *pcount)
 void resonadsr(t_bashfest *x, int slot, int *pcount)
 {
     t_event *event = &x->events[slot];
-    CMIXADSR *a = x->adsr;
+    CMIXADSR *a = event->adsr;
     float bwfac, q1[5], q2[5], phase = 0;
     
     ++(*pcount);
@@ -1069,8 +1065,8 @@ void stv(t_bashfest *x, int slot, int *pcount)
     
     float *sinewave = x->sinewave;
     int sinelen = x->sinelen;
-    float *delayline1 = x->delayline1;
-    float *delayline2 = x->delayline2;
+    float *delayline1 = event->delayline1;
+    float *delayline2 = event->delayline2;
     float max_delay = x->maxdelay;
     
     float mindel, maxdel, fac1, fac2;
