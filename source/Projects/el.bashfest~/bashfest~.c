@@ -1,7 +1,7 @@
 
 #include "bashfest.h"
 /// #import "MSPd.h"
-// update November 2022 - add a"notify" function
+// update July 2026 - many vibe-debugged fixes
 
 #define DEFAULT_MAX_OVERLAP (8) // number of overlapping instances allowed
 #define ACTIVE 0
@@ -29,7 +29,8 @@ void bashfest_dsp_free(t_bashfest *x);
 int bashfest_set_parameters(t_bashfest *x,float *params, float transpose_factor);
 t_int *bashfest_perform(t_int *w);
 void bashfest_deploy_dsp(t_bashfest *x);
-void bashfest_copy_to_MSP_buffer(t_bashfest *x, int slot);
+// void bashfest_copy_to_MSP_buffer(t_bashfest *x, int slot);
+void bashfest_copy_to_MSP_buffer(t_bashfest *x);
 /*user messages*/
 void bashfest_stop(t_bashfest *x);
 void bashfest_info(t_bashfest *x);
@@ -106,7 +107,7 @@ int C74_EXPORT main(void)
 	class_addmethod(c,(method)bashfest_grab,"grab", 0);
 	class_addmethod(c,(method)bashfest_maximum_process,"maximum_process", A_FLOAT, 0);
 	class_addmethod(c,(method)bashfest_minimum_process,"minimum_process", A_FLOAT, 0);
-	class_addmethod(c,(method)bashfest_block_dsp,"block_dsp", A_FLOAT, 0);
+//	class_addmethod(c,(method)bashfest_block_dsp,"block_dsp", A_FLOAT, 0);
     class_addmethod(c, (method)bashfest_dsp64, "dsp64", A_CANT,0);
     class_addmethod(c,(method)bashfest_notify,"notify", A_CANT, 0);
     class_addmethod(c,(method)bashfest_printmem,"printmem", 0);
@@ -126,13 +127,14 @@ t_max_err bashfest_notify(t_bashfest *x, t_symbol *s, t_symbol *msg, void *sende
 {
     return buffer_ref_notify(x->buffer_ref, s, msg, sender, data);
 }
-
+/*
 void bashfest_block_dsp(t_bashfest *x, t_floatarg t)
 {
 	
 	x->block_dsp = (short)t;
 	
 }
+*/
 void bashfest_maximum_process(t_bashfest *x, t_floatarg n)
 {
 	if(n < 0){
@@ -347,7 +349,7 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	x->most_recent_event = 0;
 	x->active_events = 0;
 	x->increment = 1.0;
-	x->block_dsp = 0;
+//	x->block_dsp = 0;
 	x->grab = 0;
 	/* buffer contains space for both input and output, thus factor of 2 */
 	x->buf_frames = x->work_buffer_size * .001 * x->sr;
@@ -430,8 +432,8 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	for(i=0; i<x->overlap_max; i++){
 		x->events[i].phasef = x->events[i].phase = 0.0;
 	}
-    x->qelem = qelem_new(x, (method)bashfest_deploy_dsp);
-    
+    x->qelem = qelem_new(x,(method)bashfest_deploy_dsp);
+    x->qelem_grab = qelem_new(x,(method)bashfest_copy_to_MSP_buffer);
 	membytes = x->overlap_max * sizeof(t_event);
 	membytes += x->sinelen * sizeof(float);
 	membytes += MAX_PARAMETERS * sizeof(float);
@@ -471,82 +473,6 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	return (x);
 }
 
-/*
-void bashfest_dsp_free(t_bashfest *x)
-{
-	int i,j;
-    if (!x) return;
-    x->hosed = 1;
-    if (x->qelem) {
-        qelem_free(x->qelem);
-    }
-    dsp_free((t_pxobject *)x);
-    // stop all events in case defer is running at low thread priority
-    for(i = 0; i < x->overlap_max; i++){
-        x->events[i].status = INACTIVE;
-    }
-    for(i=0;i<x->overlap_max;i++){
-        if(x->events[i].workbuffer){
-            sysmem_freeptr(x->events[i].workbuffer);
-            x->events[i].workbuffer = NULL;
-        }
-    }
-	sysmem_freeptr(x->events);
-	sysmem_freeptr(x->sinewave);
-	sysmem_freeptr(x->params);
-	sysmem_freeptr(x->odds);
-    for(i=0; i < x->overlap_max; i++){
-        sysmem_freeptr(x->events[i].eel);
-    }
-    for(i=0; i < x->overlap_max; i++){
-        sysmem_freeptr(x->events[i].delayline1);
-        sysmem_freeptr(x->events[i].delayline2);
-    }
-    for( i = 0; i < x->overlap_max ; i++ ){
-        for(j = 0; j < 4; j++){
-            sysmem_freeptr(x->events[i].mini_delay[j]);
-        }
-        sysmem_freeptr(x->events[i].mini_delay); // free pointers
-    }
-	for(i=0;i<MAXFILTER;i++){
-		sysmem_freeptr(x->ellipse_data[i]);
-	}
-    sysmem_freeptr(x->ellipse_data);
-    for(i=0; i < x->overlap_max; i++){
-        sysmem_freeptr(x->events[i].transfer_function);
-    }
-    for(i = 0; i < x->overlap_max; i++){
-        sysmem_freeptr(x->events[i].feedfunc1);
-        sysmem_freeptr(x->events[i].feedfunc2);
-        sysmem_freeptr(x->events[i].feedfunc3);
-        sysmem_freeptr(x->events[i].feedfunc4);
-    }
-	sysmem_freeptr(x->flamfunc1);
-    for(i = 0; i < x->overlap_max; i++){
-        for(j = 0; j < 4; j++){
-            sysmem_freeptr(x->events[i].combies[j]->arr);
-            sysmem_freeptr(x->events[i].combies[j]);
-        }
-        sysmem_freeptr(x->events[i].combies);
-    }
-    for(i = 0; i < x->overlap_max; i++){
-        for(j = 0; j < 4; j++){
-            sysmem_freeptr(x->events[i].resies[j]);
-        }
-        sysmem_freeptr(x->events[i].resies);
-    }
-    for(i = 0; i < x->overlap_max; i++){
-        sysmem_freeptr(x->events[i].adsr->func);
-        sysmem_freeptr(x->events[i].adsr);
-    }
-	sysmem_freeptr(x->dcflt);
-	sysmem_freeptr(x->tcycle.data);
-    if (x->buffer_ref){
-        object_free(x->buffer_ref);
-    }
-}
-*/
-
 void bashfest_dsp_free(t_bashfest *x)
 {
     int i, j;
@@ -556,7 +482,9 @@ void bashfest_dsp_free(t_bashfest *x)
     if (x->qelem) {
         qelem_free(x->qelem);
     }
-    
+    if (x->qelem_grab) {
+        qelem_free(x->qelem_grab);
+    }
     dsp_free((t_pxobject *)x);
 
     // 1. FREE ALL CHILDREN FIRST
@@ -603,7 +531,6 @@ void bashfest_dsp_free(t_bashfest *x)
             }
         }
         // 2. NOW FREE THE PARENT
- 
         sysmem_freeptr(x->events);
     }
 
@@ -697,7 +624,6 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
         goto laterAlligator;
 	}
 	
-    
 	trigger_vec = t_vec;
 	transpose_vec = i_vec;
     
@@ -724,265 +650,7 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
         goto laterAlligator;
     }
 
-	// this whole section is only when NO dsp is being applied
-	
-	if(x->block_dsp){
-		/* computation savings if processing is blocked */
-		
-		
-		/* preliminary transposition will be set here */
-		
-		if(tcycle.len > 0){
-			increment = tcycle.data[tcycle.p];
-			// post("position %d, increment %f",tcycle.p,increment );
-		} else {
-			increment = 1.0;
-			//error("increment default, len is zero");
-		}
-		// initial cleaning
-		for(i=0; i<n; i++){
-			outchanL[i] = outchanR[i] = 0.0;
-		}
-		flimit = (b_frames - 1) * 2;
-		for(slot_i = 0; slot_i < overlap_max; slot_i++){
-			if(events[slot_i].status == ACTIVE){
-				gain = events[slot_i].gain;
-				if(events[slot_i].transpose){ // override tcycle
-					increment = events[slot_i].transpose;
-				}
-				if(b_nchans == 1){ /* mono */
-					
-					flimit = (b_frames - 1);
-					for(j = 0; j < n; j++){
-						if(events[slot_i].countdown > 0){
-							--events[slot_i].countdown;
-						} else {
-							
-							iphase = events[slot_i].phasef;
-							frac = events[slot_i].phasef - iphase;
-							
-							if(increment > 0){
-								if(iphase == flimit || increment == 1.0){
-									outchanL[j] += b_samples[iphase] * gain;
-									outchanR[j] += b_samples[iphase] * gain;
-								} else {
-									samp1 = b_samples[iphase];
-									samp2 = b_samples[iphase+1];
-									samp1 = gain * (samp1 + frac * (samp2-samp1));
-									outchanL[j] += samp1;
-									outchanR[j] += samp1;
-								}
-							} else { /*negative increment case (currently unused but might be useful)*/
-								if(iphase == 0.0 || increment == -1.0 ){
-									outchanL[j] += b_samples[iphase] * gain;
-									outchanR[j] += b_samples[iphase] * gain;
-								} else {
-									samp2 = b_samples[iphase];
-									samp1 = b_samples[iphase-1];
-									samp1 = gain * (samp1 + frac * (samp2-samp1));
-									outchanL[j] += samp1;
-									outchanR[j] += samp1;
-								}
-							}
-							events[slot_i].phasef += increment;
-							
-							if( events[slot_i].phasef < 0.0 || events[slot_i].phasef >= b_frames){
-								events[slot_i].status = INACTIVE;
-								events[slot_i].phasef = 0;
-								// post("valid exit mono note");
-								break;
-							}
-						}
-					}
-				} else if(b_nchans == 2){
-					/* stereo */
-					
-					for(j = 0; j < n; j++){
-						if(events[slot_i].countdown > 0){
-							--events[slot_i].countdown;
-						} else {
-							iphase = events[slot_i].phasef;
-							frac = events[slot_i].phasef - iphase;
-							iphase *= 2;
-							if(increment > 0){
-								if(iphase == flimit || increment == 1.0){
-									outchanL[j] += b_samples[iphase] * gain;
-									outchanR[j] += b_samples[iphase+1] * gain;
-								} else {
-									samp1 = b_samples[iphase];
-									samp2 = b_samples[iphase+2];
-									outchanL[j] += gain * (samp1 + frac * (samp2-samp1));
-									samp1 = b_samples[iphase+1];
-									samp2 = b_samples[iphase+3];
-									outchanR[j] += gain * (samp1 + frac * (samp2-samp1));
-								}
-							} else { /*negative increment case (currently unused but might be useful)*/
-								if(iphase == 0.0 || increment == -1.0 ){
-									outchanL[j] += b_samples[iphase] * gain;
-									outchanR[j] += b_samples[iphase+1] * gain;
-								} else {
-									samp2 = b_samples[iphase];
-									samp1 = b_samples[iphase-2];
-									outchanL[j] += gain * (samp1 + frac * (samp2-samp1));
-									samp2 = b_samples[iphase+1];
-									samp1 = b_samples[iphase-1];
-									outchanR[j] += gain * (samp1 + frac * (samp2-samp1));
-								}
-							}
-							events[slot_i].phasef += increment;
-							
-							if( events[slot_i].phasef < 0.0 || events[slot_i].phasef >= b_frames){
-								events[slot_i].status = INACTIVE;
-								break;
-							}
-						}
-					}
-				}
-			}
-		}
-		
-		for(i=0; i<n; i++){
-			if(trigger_vec[i]){
-				gain = trigger_vec[i];
-				
-				insert_success = 0;
-				for(j=0; j<overlap_max; j++){
-					if(events[j].status == INACTIVE){
-                        // events[j].status = ACTIVE;
-						events[j].status = WAITING; // tag the new slot but don't activate it yet
-						events[j].gain = gain;
-						if(increment > 0){
-							events[j].phasef = 0.0;
-						} else {
-							events[j].phasef = b_frames - 1;
-						}
-						insert_success = 1;
-						new_insert = j;
-						break;
-					}
-				}	
-				
-				if(!insert_success){ // steal a note
-					
-					maxphase = 0;
-					theft_candidate = 0;
-					for(k = 0; k < overlap_max; k++){
-						if(events[k].phasef > maxphase){
-							maxphase = events[k].phasef;
-							theft_candidate = k;
-						}
-					}
-					new_insert = theft_candidate;
-					events[new_insert].gain = gain;
-					if(increment > 0){
-						events[new_insert].phasef = 0.0;
-					} else {
-						events[new_insert].phasef = b_frames - 1;
-					}
-					insert_success = 1;
-					post("stealing a note at %d for buffer %s", new_insert, sound_name);
-				}
-				events[new_insert].countdown = latency_samples;
-				events[new_insert].status = WAITING;
-				x->new_slot = new_insert;
-				x->new_gain = gain;
-				// post("new note at slot %d",new_insert);
-				if(tcycle.len > 0){
-					increment = tcycle.data[tcycle.p++];
-					if(tcycle.p >= tcycle.len){
-						tcycle.p = 0;
-					}
-					x->tcycle.p = tcycle.p;
-				} else {
-					increment = 1.0;
-				}
-				
-				for(k=i; k<n; k++){
-					//roll out for remaining portion of vector
-					if(events[new_insert].countdown > 0){
-						--events[new_insert].countdown;
-					} else {
-						if(b_nchans == 1){
-							
-							iphase = events[new_insert].phasef;
-							frac = events[new_insert].phasef - iphase;
-							if(iphase < 0 || iphase >= b_frames){
-								error("aborting on phase %f",events[new_insert].phasef);
-								break;
-							}
-							if(increment > 0){
-								if(iphase == flimit || increment == 1.0){
-									outchanL[k] += b_samples[iphase] * gain;
-									outchanR[k] += b_samples[iphase] * gain;
-								} else {
-									samp1 = b_samples[iphase];
-									samp2 = b_samples[iphase+1];
-									samp1 = gain * (samp1 + frac * (samp2-samp1));
-									outchanL[k] += samp1;
-									outchanR[k] += samp1;
-								}
-							} else { /*negative increment case (currently unused but might be useful)*/
-								if(iphase == 0.0 || increment == -1.0 ){
-									outchanL[k] += b_samples[iphase] * gain;
-									outchanR[k] += b_samples[iphase] * gain;
-								} else {
-									samp2 = b_samples[iphase];
-									samp1 = b_samples[iphase-2];
-									samp1 = gain * (samp1 + frac * (samp2-samp1));
-									outchanL[k] += samp1;
-									outchanR[k] += samp1;
-								}
-							}
-							events[new_insert].phasef += increment;
-							
-							if( events[new_insert].phasef < 0.0 || events[new_insert].phasef >= b_frames){
-								events[new_insert].status = INACTIVE;
-								break;
-							}
-						} else if(b_nchans == 2)
-						{
-							iphase = events[new_insert].phasef;
-							frac = events[new_insert].phasef - iphase;
-							iphase *= 2;
-							if(increment > 0){
-								if(iphase == flimit || increment == 1.0){
-									outchanL[k] += b_samples[iphase] * gain;
-									outchanR[k] += b_samples[iphase+1] * gain;
-								} else {
-									samp1 = b_samples[iphase];
-									samp2 = b_samples[iphase+2];
-									outchanL[k] += gain * (samp1 + frac * (samp2-samp1));
-									samp1 = b_samples[iphase+1];
-									samp2 = b_samples[iphase+3];
-									outchanR[k] += gain * (samp1 + frac * (samp2-samp1));
-								}
-							} else { /*negative increment case (currently unused but might be useful)*/
-								if(iphase == 0.0 || increment == -1.0 ){
-									outchanL[k] += b_samples[iphase] * gain;
-									outchanR[k] += b_samples[iphase+1] * gain;
-								} else {
-									samp2 = b_samples[iphase];
-									samp1 = b_samples[iphase-2];
-									outchanL[k] += gain * (samp1 + frac * (samp2-samp1));
-									samp2 = b_samples[iphase+1];
-									samp1 = b_samples[iphase-1];
-									outchanR[k] += gain * (samp1 + frac * (samp2-samp1));
-								}
-							}
-							events[new_insert].phasef += increment;
-							
-							if( events[new_insert].phasef < 0.0 || events[new_insert].phasef >= b_frames){
-								events[new_insert].status = INACTIVE;
-								break;
-							}
-						}
-					}					
-				}
-			}
-		}
-		x->increment = increment;
-		/* end of block_dsp contingecy code */
-	}
+
 	
 	/* main body of bashfest processing */	
 	
@@ -1001,11 +669,21 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 			processed_drum = events[slot_i].workbuffer + events[slot_i].in_start;
 			
 			for(j = 0; j < n; j++){
+                /*
 				if(x->grab){
 					x->grab = 0;
+                    x->grab_slot = slot_i;
+                    qelem_set(x->qelem_grab); // this is where we copy from new_slot to MSP buffer
 					// this needs to go into a qelem()
 					// bashfest_copy_to_MSP_buffer(x,slot_i);
 				}
+                */
+                if(x->grab){
+                    x->grab = 0;
+                    x->grab_slot = slot_i;
+                    x->grab_start = events[slot_i].in_start;
+                    qelem_set(x->qelem_grab); // this is where we copy from new_slot to MSP buffer
+                }
 				if(events[slot_i].countdown > 0){
 					--events[slot_i].countdown;
 				} else {
@@ -1047,8 +725,7 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 					new_insert = slot_i;
 					break;
 				}
-			}	
-			
+			}
 			if(!insert_success){ /* steal a note if necessary*/
 				maxphase = 0;
 				theft_candidate = 0;
@@ -1072,13 +749,13 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 			events[new_insert].countdown = x->latency_samples;
 			x->new_slot = new_insert;
 			x->new_gain = gain;
-            qelem_set(x->qelem);
+            qelem_set(x->qelem); // this is where we deploy the new DSP chain
             /*
-            atom_setlong(&deferred_argv[0], (long)new_insert);
-            atom_setfloat(&deferred_argv[1], gain);
-			defer_low(x,(void *)bashfest_deploy_dsp,0,deferred_argc,deferred_argv);
-			*/
-            
+            if(x->grab){
+                x->grab = 0;
+                qelem_set(x->qelem_grab); // this is where we copy current processed sound to MSP buffer
+            }
+*/
 			/* now begin output from the new note */
 			
 			out_channels = events[new_insert].out_channels;
@@ -1090,11 +767,14 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 					--events[new_insert].countdown;
 				} else{
 					iphase = events[new_insert].phase;
+                    
 					if(x->grab){
 						x->grab = 0;
-						// if too slow, defend with defer_low()
-						bashfest_copy_to_MSP_buffer(x,new_insert);
+                        x->grab_slot = new_insert;
+                        x->grab_start = events[new_insert].in_start;
+                        qelem_set(x->qelem_grab); // this is where we copy from new_slot to MSP buffer
 					}
+                    
                     // possibly zero out buffers until we move from WAITING to ACTIVE
 					if(out_channels == 1){
 						outchanL[j] += processed_drum[iphase] * events[new_insert].gainL;
@@ -1106,7 +786,6 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
 					}
 					
 					events[new_insert].phase++;
-					
 					if(events[new_insert].phase >= events[new_insert].sample_frames){
 						events[new_insert].status = INACTIVE;
 						break;
@@ -1121,16 +800,18 @@ void bashfest_perform64(t_bashfest *x, t_object *dsp64, double **ins,
         }
 }
 
-void bashfest_copy_to_MSP_buffer(t_bashfest *x, int slot)
+void bashfest_copy_to_MSP_buffer(t_bashfest *x)
 {
 	int i; //,j;
 	t_event *events = x->events;
+    int grab_slot = x->grab_slot;
+    int grab_start = x->grab_start;
 	long b_nchans;
 	long b_frames;
 	float *b_samples;
 	float *processed_drum;
 
-    
+    post("grabbing buffer at slot %d and start %d\n", grab_slot, grab_start);
     t_buffer_obj *the_buffer= NULL;
 	attach_buffer(x);
     the_buffer = buffer_ref_getobject(x->buffer_ref);
@@ -1138,9 +819,10 @@ void bashfest_copy_to_MSP_buffer(t_bashfest *x, int slot)
 	b_frames = buffer_getframecount(the_buffer);
 	b_nchans = buffer_getchannelcount(the_buffer);
     
-	processed_drum = events[slot].workbuffer + events[slot].in_start;
-	
-	if(events[slot].out_channels == b_nchans){
+	// processed_drum = events[slot].workbuffer + events[slot].in_start;
+    processed_drum = events[grab_slot].workbuffer + grab_start;
+
+	if(events[grab_slot].out_channels == b_nchans){
 		if(b_nchans == 1){
 			for(i=0;i<b_frames;i++){
 				b_samples[i] = processed_drum[i];
@@ -1292,7 +974,8 @@ void bashfest_deploy_dsp(t_bashfest *x)
             events[slot].status = ACTIVE;
         }
     }
-
+    x->grab_slot = slot;
+    x->grab_start = events[slot].out_start;
     // 9. Clean up
     buffer_unlocksamples(the_buffer);
 }

@@ -21,7 +21,7 @@
 #define COMB4 16
 #define RINGFEED 17
 #define RESONADSR 18
-#define STV 19	
+#define STV 19
 //////
 #define ROOT2 (1.4142135623730950488)
 #define PI2 (6.2831853071795862319959)
@@ -37,102 +37,105 @@
 /*data types */
 
 typedef struct
-	{
-		float *data;//contains cycle data
-		int len;//length of array
-		int p;//position pointer
-	} t_cycle;
+{
+    float *data;//contains cycle data
+    int len;//length of array
+    int p;//position pointer
+} t_cycle;
 
 typedef struct
-	{
-		long phase; // current phase in frames
-		double phasef; // current phase in frames
-		float gain; // gain for this note
-		float transpose; // transpose factor for this note (overrides tcycle)
-		float gainL;// left gain
-		float gainR;// right gain
-		short status;// status of this event slot
-		float *workbuffer;//sample processing space (both input and output)
-		float *inbuf;//pointer to input part of workbuffer
-		float *outbuf;//pointer to output part of workbuffer
-		int in_start;// location in workbuffer to read from input
-		int out_start;// location in workbuffer to write output
-		int sample_frames;//actual size in frames of sample, which changes if it gets bigger
-		int countdown;//latency counter before we actually start sending out samples
-		int out_channels; //number of channels per frame of output
-		short completed;//did the defer call do its thing?
-        // additional members for per-slot DSP service
-        LSTRUCT *eel; // handle all elliptical filters
-        float *feedfunc1; // feedback functions
-        float *feedfunc2;
-        float *feedfunc3;
-        float *feedfunc4;
-        float *transfer_function; // for compdistort
-        float **mini_delay; // small delay lines for allpass filter (we need 4 of them)
-        float *delayline1;
-        float *delayline2;
-        CMIXCOMB **combies; // comb filters (we need 4 of them)
-        CMIXRESON **resies; // resonant filters (we need 4 of them)
-        CMIXADSR *adsr;
-	} t_event;
+{
+    long phase; // current phase in frames
+    double phasef; // current phase in frames
+    float gain; // gain for this note
+    float transpose; // transpose factor for this note (overrides tcycle)
+    float gainL;// left gain
+    float gainR;// right gain
+    short status;// status of this event slot
+    float *workbuffer;//sample processing space (both input and output)
+    float *inbuf;//pointer to input part of workbuffer
+    float *outbuf;//pointer to output part of workbuffer
+    int in_start;// location in workbuffer to read from input
+    int out_start;// location in workbuffer to write output
+    int sample_frames;//actual size in frames of sample, which changes if it gets bigger
+    int countdown;//latency counter before we actually start sending out samples
+    int out_channels; //number of channels per frame of output
+    short completed;//did the defer call do its thing?
+    // additional members for per-slot DSP service
+    LSTRUCT *eel; // handle all elliptical filters
+    float *feedfunc1; // feedback functions
+    float *feedfunc2;
+    float *feedfunc3;
+    float *feedfunc4;
+    float *transfer_function; // for compdistort
+    float **mini_delay; // small delay lines for allpass filter (we need 4 of them)
+    float *delayline1;
+    float *delayline2;
+    CMIXCOMB **combies; // comb filters (we need 4 of them)
+    CMIXRESON **resies; // resonant filters (we need 4 of them)
+    CMIXADSR *adsr;
+} t_event;
 
 typedef struct _bashfest
-	{
-		t_pxobject x_obj;
-        t_buffer_ref *buffer_ref; // MSP reference to the buffer
-        void *qelem; // for scheduling DSP routine offline
-        int already_failed; // flag to send bad buffer message just one time
-		float sr; // sampling rate
-		t_symbol *wavename; // name of waveform buffer
-		short hosed; // buffers are bad
-		float fadeout; // fadeout time in sample frames (if truncation)
-		float sync; // input from groove sync signal
-		float increment; // read increment
-		int most_recent_event; // position in array where last note was initiated
-		long b_nchans; // channels of buffer
-		long b_valid; // state of buffer
-		long b_frames; // number of frames in sample buffer
-		float *b_samples; // pointer samples in buffer
-		int overlap_max; // max number of simultaneous plays 
-		t_event *events; //note attacks
-		int active_events; // how many currently activated notes?
-		int buf_samps;//total samples in workbuffer
-		int halfbuffer;//buf_samps / 2
-		int buf_frames;// number of sample frames in workbuffer
-		int latency_samples;// amount of samples to count down before playing sample
-		float *params; // parameter list
-		float *odds;// odds for each process happening
-		int max_process_per_note;//what it says
-		int min_process_per_note;//ditto
-		int new_slot;//position for newest note
-		float new_gain;//recently assigned gain
-		short verbose;//toggle Max window error reporting
-		float work_buffer_size;// size in ms of work buffers
-		t_cycle tcycle;//contains an optional transposition cycle
-		short block_dsp;//flag to turn off all dsp and play straight from MSP buffer
-		short sound_lock;//keep current processed sound in buffer
-		short grab;//flag to copy immediate processed buffer into MSP buffer
-		char sound_name[256];
-		float *trigger_vec;//stores incoming trigger vectors
-		int vs;//Max/MSP vector size
-		/* stuff for bashfest DSP */
-		float *sinewave; // only one version of this table, and it is read-only
-		int sinelen;
-		short mute;
-		float maxdelay;
-		float max_mini_delay ;
-		int tf_len; // length of transfer function
-		int feedfunclen;
-		int flamfunc1len;
-		float *flamfunc1; // only one version of this function, and it is read-only
-		// CMIXADSR *adsr;
-		float max_comb_lpt;
-		float *reverb_ellipse_data;
-		float **ellipse_data;
-		float *dcflt;
-		CMIXOSC oscar;
-        float memcnt;  // size of the bashfest~ memory in MB
-	} t_bashfest;
+{
+    t_pxobject x_obj;
+    t_buffer_ref *buffer_ref; // MSP reference to the buffer
+    void *qelem; // for scheduling DSP routine offline
+    void *qelem_grab; // for copying current processed buffer into main Max buffer
+    int already_failed; // flag to send bad buffer message just one time
+    float sr; // sampling rate
+    t_symbol *wavename; // name of waveform buffer
+    short hosed; // buffers are bad
+    float fadeout; // fadeout time in sample frames (if truncation)
+    float sync; // input from groove sync signal
+    float increment; // read increment
+    int most_recent_event; // position in array where last note was initiated
+    long b_nchans; // channels of buffer
+    long b_valid; // state of buffer
+    long b_frames; // number of frames in sample buffer
+    float *b_samples; // pointer samples in buffer
+    int overlap_max; // max number of simultaneous plays
+    t_event *events; //note attacks
+    int active_events; // how many currently activated notes?
+    int buf_samps;//total samples in workbuffer
+    int halfbuffer;//buf_samps / 2
+    int buf_frames;// number of sample frames in workbuffer
+    int latency_samples;// amount of samples to count down before playing sample
+    float *params; // parameter list
+    float *odds;// odds for each process happening
+    int max_process_per_note;//what it says
+    int min_process_per_note;//ditto
+    int new_slot;//position for newest note
+    int grab_slot; // slot to grab from, into the main MSP buffer
+    float new_gain;//recently assigned gain
+    short verbose;//toggle Max window error reporting
+    float work_buffer_size;// size in ms of work buffers
+    t_cycle tcycle;//contains an optional transposition cycle
+    short block_dsp;//flag to turn off all dsp and play straight from MSP buffer
+    short sound_lock;//keep current processed sound in buffer
+    short grab;//flag to copy immediate processed buffer into MSP buffer
+    int grab_start; // location in buffer to read from
+    char sound_name[256];
+    float *trigger_vec;//stores incoming trigger vectors
+    int vs;//Max/MSP vector size
+    /* stuff for bashfest DSP */
+    float *sinewave; // only one version of this table, and it is read-only
+    int sinelen;
+    short mute;
+    float maxdelay;
+    float max_mini_delay ;
+    int tf_len; // length of transfer function
+    int feedfunclen;
+    int flamfunc1len;
+    float *flamfunc1; // only one version of this function, and it is read-only
+    // CMIXADSR *adsr;
+    float max_comb_lpt;
+    float *reverb_ellipse_data;
+    float **ellipse_data;
+    float *dcflt;
+    CMIXOSC oscar;
+    float memcnt;  // size of the bashfest~ memory in MB
+} t_bashfest;
 
 
 
@@ -165,8 +168,8 @@ void killdc( float *inbuf, int in_frames, int channels, LSTRUCT *eel, t_bashfest
 void setExpFlamFunc(float *arr, int flen, float v1,float v2,float alpha);
 void setflamfunc1(float *arr, int flen);
 void funcgen1(float *outArray, int outlen, float duration, float outMin, float outMax,
-			  float speed1, float speed2, float gain1, float gain2, float *phs1, float *phs2, 
-			  float *sine, int sinelen);
+              float speed1, float speed2, float gain1, float gain2, float *phs1, float *phs2,
+              float *sine, int sinelen);
 void normtab(float *inarr,float *outarr, float min, float max, int len);
 float mapp(float in,float imin,float imax,float omin,float omax);
 float oscil(float amp,float si,float *farray,int len,float *phs);
@@ -174,8 +177,8 @@ void set_dcflt(float *a);
 
 void set_distortion_table(float *arr, float cut, float max, int len);
 float dlookup(float samp,float *arr,int len);
-void do_compdist(float *in,float *out,int sampFrames,int nchans,int channel, 
-				 float cutoff,float maxmult,int lookupflag,float *table,int range,float bufMaxamp);
+void do_compdist(float *in,float *out,int sampFrames,int nchans,int channel,
+                 float cutoff,float maxmult,int lookupflag,float *table,int range,float bufMaxamp);
 float getmaxamp(float *arr, int len);
 void buildadsr(CMIXADSR *a);
 /*bashfest dsp functions */
