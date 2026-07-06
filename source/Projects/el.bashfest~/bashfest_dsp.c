@@ -970,16 +970,21 @@ void compdist(t_bashfest *x, int slot, int *pcount)
     event->out_start = in_start; event->in_start = out_start;
 }
 
-
+/*
 void ringfeed(t_bashfest *x, int slot, int *pcount)
 {
     t_event *event = &x->events[slot];
-    float lfo_freq, rez, rvbt, reson_cf, reson_bw_fac, overhang;
+    float ring_freq, rez, rvbt, reson_cf, reson_bw_fac, overhang;
+    float sample;
+    float gain_compensation = 0.1;
     
     ++(*pcount);
-    lfo_freq = x->params[(*pcount)++]; rez = x->params[(*pcount)++];
-    rvbt = x->params[(*pcount)++]; reson_cf = x->params[(*pcount)++];
-    reson_bw_fac = x->params[(*pcount)++]; overhang = x->params[(*pcount)++];
+    ring_freq = x->params[(*pcount)++];
+    rez = x->params[(*pcount)++];
+    rvbt = x->params[(*pcount)++];
+    reson_cf = x->params[(*pcount)++];
+    reson_bw_fac = x->params[(*pcount)++];
+    overhang = x->params[(*pcount)++];
 
     int in_start = event->in_start;
     int out_start = (in_start + x->halfbuffer) % x->buf_samps;
@@ -987,14 +992,21 @@ void ringfeed(t_bashfest *x, int slot, int *pcount)
     float *outbuf = event->workbuffer + out_start;
     float *out_limit = outbuf + x->halfbuffer;
     int channels = event->out_channels;
-
-    float lfo_si = lfo_freq * ((float)x->sinelen / x->sr);
+    float lfo_si = ring_freq * ((float)x->sinelen / x->sr);
     float lfo_phs = 0;
     float lpt = 1.0f / (rez > 10 ? rez : 10);
-    if (lpt > x->max_comb_lpt) lpt = x->max_comb_lpt;
-
+    int in_frames = event->sample_frames;
+    
+    if (lpt > x->max_comb_lpt){
+        lpt = x->max_comb_lpt;
+    }
+    if(rvbt >= 1.0){
+        rvbt = 0.99;
+    }
+    //post("lpt: %f\n",lpt);
+   // post("lfo %f rez %f rvbt %f cf %f bwfac %f overhang %f\n",ring_freq, rez, rvbt, reson_cf, reson_bw_fac, overhang);
     for (int j = 0; j < channels; j++) {
-        mycombset(lpt, (rvbt < 1 ? rvbt : 0.99f), 0, event->combies[j]->arr, x->sr);
+        mycombset(lpt, rvbt, 0, event->combies[j]->arr, x->sr);
         rsnset2(reson_cf, reson_cf * reson_bw_fac, 2.0f, 0, event->resies[j]->q, x->sr);
     }
 
@@ -1005,14 +1017,114 @@ void ringfeed(t_bashfest *x, int slot, int *pcount)
         for (int j = 0; j < channels; j++) {
             float sig = (i < event->sample_frames) ? inbuf[i * channels + j] * mod : 0;
             sig = sig + mycomb(sig, event->combies[j]->arr);
-            outbuf[i * channels + j] = reson(sig, event->resies[j]->q);
+            sample = reson(sig, event->resies[j]->q);
+            sample *= gain_compensation;
+            // clear denormal
+            if ((sample > -1.0e-15f) && (sample < 1.0e-15f)){
+                sample = 0.0f;
+            }
+            
+            // clip sample
+            if(sample > 1.0){
+                sample = 1.0;
+            } else if(sample < -1.0){
+                sample = -1.0;
+            }
+            
+            outbuf[i * channels + j] = sample;
         }
     }
     event->sample_frames = out_frames;
     event->out_start = in_start; event->in_start = out_start;
 }
+*/
 
+void ringfeed(t_bashfest *x, int slot, int *pcount)
+{
+    t_event *event = &x->events[slot];
+    float *params = x->params;
+    float ring_freq, rez, rvbt, reson_cf, reson_bw_fac, overhang;
+    float sample;
+    float gain_compensation = 0.1f;
+    
+    // 1. Parameter Fetch
+    ++(*pcount);
+    ring_freq    = params[(*pcount)++];
+    rez          = params[(*pcount)++];
+    rvbt         = params[(*pcount)++];
+    reson_cf     = params[(*pcount)++];
+    reson_bw_fac = params[(*pcount)++];
+    overhang     = params[(*pcount)++];
 
+    if (x->sr <= 0 || event->sample_frames <= 0) return;
+
+    // 2. Setup Pointers (Ping-Pong)
+    int in_start = event->in_start;
+    int out_start = (in_start + x->halfbuffer) % x->buf_samps;
+    float *inbuf = event->workbuffer + in_start;
+    float *outbuf_start = event->workbuffer + out_start;
+    int channels = event->out_channels;
+    int in_frames = event->sample_frames;
+
+    // 3. DSP Sanitization
+    float lfo_si = ring_freq * ((float)x->sinelen / x->sr);
+    float lfo_phs = 0;
+    float lpt = 1.0f / (rez > 10.0f ? rez : 10.0f);
+    if (lpt > x->max_comb_lpt) lpt = x->max_comb_lpt;
+    if (rvbt >= 1.0f) rvbt = 0.99f;
+    if (rvbt < 0.0f)  rvbt = 0.0f;
+
+    // Filter sanity
+    if (reson_cf < 20.0f) reson_cf = 20.0f;
+    if (reson_cf > x->sr * 0.45f) reson_cf = x->sr * 0.45f;
+    float reson_bw = reson_cf * reson_bw_fac;
+    if (reson_bw < 1.0f) reson_bw = 1.0f;
+
+    // 4. Initialize Local Slot State
+    for (int j = 0; j < channels; j++) {
+        mycombset(lpt, rvbt, 0, event->combies[j]->arr, x->sr);
+        rsnset2(reson_cf, reson_bw, 2.0f, 0, event->resies[j]->q, x->sr);
+    }
+
+    // 5. THE WALL: Calculate safe output frames upfront
+    int out_frames = in_frames + (int)(overhang * x->sr);
+    int max_safe_frames = x->halfbuffer / channels;
+
+    if (out_frames > max_safe_frames) {
+        out_frames = max_safe_frames;
+    }
+
+    // 6. Processing Loop
+    for (int i = 0; i < out_frames; i++) {
+        float mod = oscil(1.0f, lfo_si, x->sinewave, x->sinelen, &lfo_phs);
+        
+        for (int j = 0; j < channels; j++) {
+            // Stage 1: Ring Mod (Feeding into Stage 2)
+            float input_sample = (i < in_frames) ? inbuf[i * channels + j] : 0.0f;
+            float sig = input_sample * mod;
+            
+            // Stage 2: Comb
+            sig = sig + mycomb(sig, event->combies[j]->arr);
+            
+            // Stage 3: Reson
+            sample = reson(sig, event->resies[j]->q);
+            sample *= gain_compensation;
+            
+            // Anti-Denormal protection
+            if (sample > -1.0e-15f && sample < 1.0e-15f) {
+                sample = 0.0f;
+            }
+            
+            outbuf_start[i * channels + j] = sample;
+        }
+    }
+
+    // 7. Update Event State
+    event->sample_frames = out_frames;
+    event->out_start = in_start;
+    event->in_start = out_start;
+}
+// AI version
 void resonadsr(t_bashfest *x, int slot, int *pcount)
 {
     t_event *event = &x->events[slot];
@@ -1020,16 +1132,21 @@ void resonadsr(t_bashfest *x, int slot, int *pcount)
     float bwfac, q1[5], q2[5], phase = 0;
     
     ++(*pcount);
-    a->a = x->params[(*pcount)++]; a->d = x->params[(*pcount)++];
-    a->r = x->params[(*pcount)++]; a->v1 = x->params[(*pcount)++];
-    a->v2 = x->params[(*pcount)++]; a->v3 = x->params[(*pcount)++];
-    a->v4 = x->params[(*pcount)++]; bwfac = x->params[(*pcount)++];
+    a->a = x->params[(*pcount)++];
+    a->d = x->params[(*pcount)++];
+    a->r = x->params[(*pcount)++];
+    a->v1 = x->params[(*pcount)++];
+    a->v2 = x->params[(*pcount)++];
+    a->v3 = x->params[(*pcount)++];
+    a->v4 = x->params[(*pcount)++];
+    bwfac = x->params[(*pcount)++];
 
     int in_start = event->in_start;
     int out_start = (in_start + x->halfbuffer) % x->buf_samps;
     float *inbuf = event->workbuffer + in_start;
     float *outbuf = event->workbuffer + out_start;
     float *out_limit = outbuf + x->halfbuffer;
+    float sample;
     int channels = event->out_channels;
 
     float notedur = (float)event->sample_frames / x->sr;
@@ -1042,10 +1159,14 @@ void resonadsr(t_bashfest *x, int slot, int *pcount)
         if (outbuf + channels > out_limit) { event->sample_frames = i; break; }
         float cf = a->func[(int)phase];
         rsnset2(cf, cf * bwfac, 2.0f, 1.0f, q1, x->sr);
-        *outbuf++ = reson(*inbuf++, q1);
+        sample = reson(*inbuf++, q1);
+        if ((sample > -1.0e-15f) && (sample < 1.0e-15f)) sample = 0.0f;
+        *outbuf++ = sample;
         if (channels == 2) {
             rsnset2(cf, cf * bwfac, 2.0f, 1.0f, q2, x->sr);
-            *outbuf++ = reson(*inbuf++, q2);
+            if ((sample > -1.0e-15f) && (sample < 1.0e-15f)) sample = 0.0f;
+            sample = reson(*inbuf++, q2);
+            *outbuf++ = sample;
         }
         phase += si; if (phase >= a->len) phase = a->len - 1;
     }

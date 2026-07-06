@@ -16,7 +16,8 @@ void putsine (float *arr, int len)
 
 float boundrand(float min, float max)
 {
-	return min + (max-min) * ((float)rand()/MY_MAX);
+    float val = min + (max-min) * ((float)rand()/(float)RAND_MAX);
+	return val;
 }
 
 
@@ -461,6 +462,15 @@ float mapp(float in,float imin,float imax,float omin,float omax)
 		return 0.0 ;
     }
 	return( omin+((omax-omin)*((in-imin)/(imax-imin))) );
+
+    /*
+    float range = imax - imin;
+    if ((range < 0.000001f) && (range > -0.000001f) {
+        return omin;
+    }
+    return (omin + ((omax - omin) * ((in - imin) / range)));
+        */
+        
 }
 
 float oscil(float amp,float si,float *farray,int len,float *phs)
@@ -603,6 +613,7 @@ void buildadsr(CMIXADSR *a)
 	float f3 = a->v3;
 	float f4 = a->v4;
 	
+    // post("A %f D %f S %f R %f f1 %f f2 %f f3 %f f4 %f\n",A,D,S,R,f1,f2,f3,f4);
 	int funclen = a->len;
 	float *func = a->func;
 	float total;

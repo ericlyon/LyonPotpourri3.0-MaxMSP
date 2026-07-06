@@ -14,7 +14,7 @@
 #define PROCESS_COUNT 20
 #define CYCLE_MAX 1024
 // add safety samples to each allocated block of memory
-#define BUF_PAD (2)
+#define BUF_PAD (8192)
 #define OBJECT_NAME "bashfest~"
 
 
@@ -471,6 +471,7 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	return (x);
 }
 
+/*
 void bashfest_dsp_free(t_bashfest *x)
 {
 	int i,j;
@@ -543,6 +544,85 @@ void bashfest_dsp_free(t_bashfest *x)
     if (x->buffer_ref){
         object_free(x->buffer_ref);
     }
+}
+*/
+
+void bashfest_dsp_free(t_bashfest *x)
+{
+    int i, j;
+    if (!x) return;
+    x->hosed = 1;
+    
+    if (x->qelem) {
+        qelem_free(x->qelem);
+    }
+    
+    dsp_free((t_pxobject *)x);
+
+    // 1. FREE ALL CHILDREN FIRST
+    if (x->events) {
+        
+        for (i = 0; i < x->overlap_max; i++) {
+            if (x->events[i].workbuffer) sysmem_freeptr(x->events[i].workbuffer);
+            if (x->events[i].eel) sysmem_freeptr(x->events[i].eel);
+            if (x->events[i].delayline1) sysmem_freeptr(x->events[i].delayline1);
+            if (x->events[i].delayline2) sysmem_freeptr(x->events[i].delayline2);
+            if (x->events[i].transfer_function) sysmem_freeptr(x->events[i].transfer_function);
+            if (x->events[i].feedfunc1) sysmem_freeptr(x->events[i].feedfunc1);
+            if (x->events[i].feedfunc2) sysmem_freeptr(x->events[i].feedfunc2);
+            if (x->events[i].feedfunc3) sysmem_freeptr(x->events[i].feedfunc3);
+            if (x->events[i].feedfunc4) sysmem_freeptr(x->events[i].feedfunc4);
+            
+            if (x->events[i].mini_delay) {
+                for (j = 0; j < 4; j++) {
+                    if (x->events[i].mini_delay[j]) sysmem_freeptr(x->events[i].mini_delay[j]);
+                }
+                sysmem_freeptr(x->events[i].mini_delay);
+            }
+            
+            if (x->events[i].combies) {
+                for (j = 0; j < 4; j++) {
+                    if (x->events[i].combies[j]) {
+                        if (x->events[i].combies[j]->arr) sysmem_freeptr(x->events[i].combies[j]->arr);
+                        sysmem_freeptr(x->events[i].combies[j]);
+                    }
+                }
+                sysmem_freeptr(x->events[i].combies);
+            }
+            
+            if (x->events[i].resies) {
+                for (j = 0; j < 4; j++) {
+                    if (x->events[i].resies[j]) sysmem_freeptr(x->events[i].resies[j]);
+                }
+                sysmem_freeptr(x->events[i].resies);
+            }
+            
+            if (x->events[i].adsr) {
+                if (x->events[i].adsr->func) sysmem_freeptr(x->events[i].adsr->func);
+                sysmem_freeptr(x->events[i].adsr);
+            }
+        }
+        // 2. NOW FREE THE PARENT
+ 
+        sysmem_freeptr(x->events);
+    }
+
+    // 3. Free global read-only tables
+    if (x->sinewave) sysmem_freeptr(x->sinewave);
+    if (x->params) sysmem_freeptr(x->params);
+    if (x->odds) sysmem_freeptr(x->odds);
+    if (x->flamfunc1) sysmem_freeptr(x->flamfunc1);
+    if (x->reverb_ellipse_data) sysmem_freeptr(x->reverb_ellipse_data);
+    if (x->dcflt) sysmem_freeptr(x->dcflt);
+    if (x->tcycle.data) sysmem_freeptr(x->tcycle.data);
+    
+    if (x->ellipse_data) {
+        for (i = 0; i < MAXFILTER; i++) sysmem_freeptr(x->ellipse_data[i]);
+        sysmem_freeptr(x->ellipse_data);
+    }
+    
+    if (x->buffer_ref) object_free(x->buffer_ref);
+
 }
 
 void bashfest_dblclick(t_bashfest *x)
@@ -1141,7 +1221,7 @@ void bashfest_deploy_dsp(t_bashfest *x)
             }
             
             // SAFETY: Zero out the rest of the workbuffer to prevent "ghost" audio
-            for (i = copy_count; i < (x->buf_samps + BUF_PAD); i++) {
+            for (i = copy_count; i < (x->buf_samps); i++) {
                 events[slot].workbuffer[i] = 0.0f;
             }
 
