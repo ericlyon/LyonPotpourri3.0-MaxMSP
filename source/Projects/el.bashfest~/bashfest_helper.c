@@ -157,8 +157,6 @@ void lobut(float *a, float cutoff,float SR)
 	a[3] = a[1];
 	a[4] = 2.0 * ( 1.0 - c*c) * a[1];
 	a[5] = ( 1.0 - ROOT2 * c + c * c) * a[1];
-	
-	
 }
 
 void hibut(float *a, float cutoff, float SR)			

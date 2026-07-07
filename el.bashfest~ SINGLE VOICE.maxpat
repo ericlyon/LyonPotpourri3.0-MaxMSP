@@ -14,6 +14,17 @@
         "boxes": [
             {
                 "box": {
+                    "id": "obj-3",
+                    "maxclass": "message",
+                    "numinlets": 2,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 308.0, 112.0, 43.0, 20.0 ],
+                    "text": "writeaiff"
+                }
+            },
+            {
+                "box": {
                     "id": "obj-27",
                     "interpinlet": 1,
                     "maxclass": "gain~",
@@ -341,10 +352,32 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 1477.0, 572.0, 936.0, 752.0 ],
+                        "rect": [ 2750.0, 500.0, 936.0, 752.0 ],
                         "default_fontsize": 10.0,
                         "visible": 1,
                         "boxes": [
+                            {
+                                "box": {
+                                    "id": "obj-12",
+                                    "maxclass": "message",
+                                    "numinlets": 2,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 501.0, 184.0, 29.5, 20.0 ],
+                                    "text": "1 1"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "id": "obj-22",
+                                    "maxclass": "message",
+                                    "numinlets": 2,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 328.0, 140.0, 29.5, 20.0 ],
+                                    "text": "3 10"
+                                }
+                            },
                             {
                                 "box": {
                                     "id": "obj-27",
@@ -1392,8 +1425,8 @@
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 551.0, 416.0, 62.0, 24.0 ],
-                                    "text": "pipe 500"
+                                    "patching_rect": [ 551.0, 416.0, 70.0, 24.0 ],
+                                    "text": "pipe 2500"
                                 }
                             },
                             {
@@ -1469,30 +1502,6 @@
                                     "outlettype": [ "" ],
                                     "patching_rect": [ 15.0, 79.0, 20.0, 24.0 ],
                                     "text": "1"
-                                }
-                            },
-                            {
-                                "box": {
-                                    "id": "obj-11",
-                                    "maxclass": "toggle",
-                                    "numinlets": 1,
-                                    "numoutlets": 1,
-                                    "outlettype": [ "int" ],
-                                    "parameter_enable": 0,
-                                    "patching_rect": [ 164.0, 391.0, 15.0, 15.0 ]
-                                }
-                            },
-                            {
-                                "box": {
-                                    "fontname": "Arial",
-                                    "fontsize": 14.0,
-                                    "id": "obj-12",
-                                    "maxclass": "message",
-                                    "numinlets": 2,
-                                    "numoutlets": 1,
-                                    "outlettype": [ "" ],
-                                    "patching_rect": [ 164.0, 416.0, 101.0, 24.0 ],
-                                    "text": "block_dsp $1"
                                 }
                             },
                             {
@@ -1621,13 +1630,7 @@
                             },
                             {
                                 "patchline": {
-                                    "destination": [ "obj-12", 0 ],
-                                    "source": [ "obj-11", 0 ]
-                                }
-                            },
-                            {
-                                "patchline": {
-                                    "destination": [ "obj-18", 0 ],
+                                    "destination": [ "obj-21", 0 ],
                                     "source": [ "obj-12", 0 ]
                                 }
                             },
@@ -1677,6 +1680,12 @@
                                 "patchline": {
                                     "destination": [ "obj-16", 0 ],
                                     "source": [ "obj-21", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-21", 0 ],
+                                    "source": [ "obj-22", 0 ]
                                 }
                             },
                             {
@@ -1819,11 +1828,11 @@
                     "numinlets": 2,
                     "numoutlets": 2,
                     "outlettype": [ "signal", "signal" ],
-                    "patching_rect": [ 57.0, 242.0, 196.0, 22.0 ],
+                    "patching_rect": [ 57.0, 242.0, 189.0, 22.0 ],
                     "saved_object_attributes": {
-                        "latency": 16384
+                        "latency": 1024
                     },
-                    "text": "el.bashfest~ goofball 2000 16384 1"
+                    "text": "el.bashfest~ goofball 2000 1024 4"
                 }
             },
             {
@@ -1916,7 +1925,7 @@
                     "spacing_x": 0.0,
                     "spacing_y": 0.0,
                     "text": "open el.bashfest~ reference",
-                    "textcolor": [ 0.32200000000000006, 0.41000000000000003, 0.542, 1.0 ],
+                    "textcolor": [ 0.27, 0.35, 0.47, 1.0 ],
                     "textoncolor": [ 0.27, 0.35, 0.47, 1.0 ],
                     "textovercolor": [ 0.4, 0.5, 0.65, 1.0 ],
                     "underline": 1,
@@ -2070,7 +2079,7 @@
             {
                 "patchline": {
                     "destination": [ "obj-27", 0 ],
-                    "midpoints": [ 243.5, 280.5, 144.5, 280.5 ],
+                    "midpoints": [ 236.5, 280.5, 144.5, 280.5 ],
                     "order": 0,
                     "source": [ "obj-23", 1 ]
                 }
@@ -2110,6 +2119,12 @@
                     "destination": [ "obj-20", 1 ],
                     "midpoints": [ 144.5, 361.5, 80.5, 361.5 ],
                     "source": [ "obj-27", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-22", 0 ],
+                    "source": [ "obj-3", 0 ]
                 }
             },
             {

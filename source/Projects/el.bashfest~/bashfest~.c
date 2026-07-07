@@ -45,7 +45,6 @@ void bashfest_killproc(t_bashfest *x, t_floatarg p);
 void bashfest_soloproc(t_bashfest *x, t_floatarg p);
 void bashfest_latency(t_bashfest *x, t_floatarg n);
 void bashfest_verbose(t_bashfest *x, t_floatarg t);
-void bashfest_block_dsp(t_bashfest *x, t_floatarg t);
 void bashfest_gozero(t_bashfest *x);
 void bashfest_grab(t_bashfest *x);
 void bashfest_printmem(t_bashfest *x);
@@ -107,7 +106,6 @@ int C74_EXPORT main(void)
 	class_addmethod(c,(method)bashfest_grab,"grab", 0);
 	class_addmethod(c,(method)bashfest_maximum_process,"maximum_process", A_FLOAT, 0);
 	class_addmethod(c,(method)bashfest_minimum_process,"minimum_process", A_FLOAT, 0);
-//	class_addmethod(c,(method)bashfest_block_dsp,"block_dsp", A_FLOAT, 0);
     class_addmethod(c, (method)bashfest_dsp64, "dsp64", A_CANT,0);
     class_addmethod(c,(method)bashfest_notify,"notify", A_CANT, 0);
     class_addmethod(c,(method)bashfest_printmem,"printmem", 0);
@@ -160,14 +158,13 @@ void bashfest_verbose(t_bashfest *x, t_floatarg t)
 
 void bashfest_printmem(t_bashfest *x)
 {
-    post("Memory (MB) for this el.bashfest~ unit: %f", x->memcnt);
+    post("Memory (MB) for this el.bashfest~ unit: %.2f", x->memcnt);
 }
 
 t_max_err bashfest_latency_get(t_bashfest *x, void *attr, long *ac, t_atom **av)
 {
 	if (ac && av) {
 		char alloc;
-		
 		if (atom_alloc(ac, av, &alloc)) {
 			return MAX_ERR_GENERIC;
 		}
@@ -320,7 +317,6 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
         x->sr = 48000;
     }
 	
-	
 	x->work_buffer_size = DEFAULT_BUFFER_SIZE;
 	if(argc < 1 ){
 		error("%s: must specify a buffer!",OBJECT_NAME);
@@ -338,7 +334,6 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	atom_arg_getfloat(&tmpfloat,3,argc,argv);
 	x->overlap_max = tmpfloat;
 	
-	
 	dsp_setup((t_pxobject *)x,2); // added inlet
 	outlet_new((t_pxobject *)x, "signal");
 	outlet_new((t_pxobject *)x, "signal");
@@ -349,14 +344,12 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
 	x->most_recent_event = 0;
 	x->active_events = 0;
 	x->increment = 1.0;
-//	x->block_dsp = 0;
 	x->grab = 0;
-	/* buffer contains space for both input and output, thus factor of 2 */
 	x->buf_frames = x->work_buffer_size * .001 * x->sr;
 	x->buf_samps = x->buf_frames * 2 * 2; // two channels, double the size of the maximum workspace
 	x->halfbuffer = x->buf_samps / 2;
 	x->maxdelay = 1.0; // in seconds
-	/*memory allocation */
+	// memory allocation
 	x->events = (t_event *) sysmem_newptrclear(x->overlap_max * sizeof(t_event));
 	x->sinewave = (float *) sysmem_newptrclear((x->sinelen + BUF_PAD) * sizeof(float));
 	x->params = (float *) sysmem_newptrclear(MAX_PARAMETERS * sizeof(float));
@@ -418,14 +411,11 @@ void *bashfest_new(t_symbol *msg, short argc, t_atom *argv)
             x->events[i].resies[j] = (CMIXRESON *)sysmem_newptrclear(4 * sizeof(CMIXRESON));
         }
     }
-    //x->adsr->len = 32768;
-    //x->adsr->func = (float *) sysmem_newptrclear(x->adsr->len * sizeof(float));
     for(i = 0; i < x->overlap_max; i++){
         x->events[i].adsr = (CMIXADSR *)sysmem_newptrclear(sizeof(CMIXADSR));
         x->events[i].adsr->len = 32768;
         x->events[i].adsr->func = (float *)sysmem_newptrclear(x->events[i].adsr->len * sizeof(float));
     }
-	// x->adsr = (CMIXADSR *) sysmem_newptrclear(1 * sizeof(CMIXADSR));
 	x->dcflt = (float *) sysmem_newptrclear(16 * sizeof(float));
 	x->tcycle.data = (float *) sysmem_newptrclear(CYCLE_MAX * sizeof(float));
 	x->tcycle.len = 0;
@@ -811,7 +801,7 @@ void bashfest_copy_to_MSP_buffer(t_bashfest *x)
 	float *b_samples;
 	float *processed_drum;
 
-    post("grabbing buffer at slot %d and start %d\n", grab_slot, grab_start);
+    //  post("grabbing buffer at slot %d and start %d\n", grab_slot, grab_start);
     t_buffer_obj *the_buffer= NULL;
 	attach_buffer(x);
     the_buffer = buffer_ref_getobject(x->buffer_ref);
