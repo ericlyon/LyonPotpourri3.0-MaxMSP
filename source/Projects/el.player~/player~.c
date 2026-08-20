@@ -389,10 +389,12 @@ void player_perform64(t_player *x, t_object *dsp64, double **ins,
 	// ok we do have business here
 	
 	
-	if(connections[1]){// increment connected
+	if(x->connections[1] > 0){// increment connected
 		vincrement = increment_vec[0]; // startup
+       //  post("initiated note with increment %f\n", vincrement);
 	} else {
 		vincrement = 1.0; // default increment (improve by reading from float inlet)
+        // post("initiated note with default increment %f\n", vincrement);
 	}
 	// here is where we loop through each channel
 	
@@ -449,7 +451,7 @@ void player_perform64(t_player *x, t_object *dsp64, double **ins,
 					events[i].phase += events[i].increment;
 				}
 				else {
-					if(connections[1]){
+					if(x->connections[1]){
 						events[i].phase += increment_vec[i];
 					} else {
 						events[i].phase += 1.0; // default increment
@@ -472,11 +474,14 @@ void player_perform64(t_player *x, t_object *dsp64, double **ins,
 			
 			// read instantaneous increment, or use 1.0 if not connected
 			
-			if(connections[1]){
+			if(x->connections[1] > 0){
 				increment = increment_vec[i];// grab instantaneous increment
+               // post("Increment is set to %f\n", increment);
 			}
 			else {
 				increment = 1.0; // default
+               // post("Increment defaulted to %f\n", increment);
+               // post("connections sub 1 value: %d\n", x->connections[1]);
 			}
 			insert_success = 0;
 			for(j=0; j<overlap_max; j++){
@@ -590,6 +595,12 @@ void player_dsp_free(t_player *x)
 
 void player_dsp64(t_player *x, t_object *dsp64, short *count, double sr, long n, long flags)
 {
+    int i;
+    
+    for(i = 0; i < 2; i++){
+        x->connections[i] = count[i];
+        // post("inlet %d connection status: %d\n",i, count[i]);
+    }
     /*
     //   post("64 bit version of player~");
     if(!sr)
