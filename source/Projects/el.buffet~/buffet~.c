@@ -324,7 +324,7 @@ escape2: ;
 	buffet_update(x);
 }
 
-
+/*
 void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 {
 	long skipin_frames;
@@ -340,7 +340,7 @@ void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 	long b_nchans;
 	t_symbol *dubname;
 //    t_buffer_ref *dubref;
-//    t_buffer_ref *srcref;
+
     t_buffer_obj *dubbuf;
     t_buffer_obj *srcbuf;
     
@@ -395,14 +395,7 @@ void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
         return;
     }
 	// attach buffers
-//	setbuffy(dubsource);
-//	setbuffy(thisbuf);
-    
 
-	
-	/* sanity check: segduration + skipin not greater than thisbuf, channel counts match,
-	 fadein and fadeout don't exceed segduration, skipin and skipout >= 0,
-	 */
 	if( buffer_getchannelcount(dubbuf) != buffer_getchannelcount(srcbuf)  ){
 		error("%s: channel mismatch between %s (%d chans) and %s (%d chans)",
 			  x->wavename->s_name, buffer_getchannelcount(srcbuf), dubname->s_name, buffer_getchannelcount(dubbuf) );
@@ -460,6 +453,126 @@ void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 	// send bang that overdub has completed
     buffet_update(x);
 	
+}
+*/
+
+void buffet_overdub(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
+{
+    long skipin_frames, skipout_frames, seg_frames, fadein_frames, fadeout_frames, sust_frames;
+    float val, gain, evpval;
+    int i, j;
+    long b_nchans;
+    t_symbol *dubname;
+    t_buffer_obj *dubbuf;
+    t_buffer_obj *srcbuf;
+    float *thisbufsamps, *dubsourcesamps;
+    
+    if (argc < 7) {
+        post("%s usage: overdub <dubsource skipin skipout gain segdur fadein fadeout>", OBJECT_NAME);
+        return;
+    }
+
+    atom_arg_getsym(&dubname, 0, argc, argv);
+    val = atom_getfloatarg(1, argc, argv);
+    skipin_frames = ms2frames(val, x->sr);
+    val = atom_getfloatarg(2, argc, argv);
+    skipout_frames = ms2frames(val, x->sr);
+    gain = atom_getfloatarg(3, argc, argv);
+    val = atom_getfloatarg(4, argc, argv);
+    seg_frames = ms2frames(val, x->sr);
+    val = atom_getfloatarg(5, argc, argv);
+    fadein_frames = ms2frames(val, x->sr);
+    val = atom_getfloatarg(6, argc, argv);
+    fadeout_frames = ms2frames(val, x->sr);
+    
+    // Attach source buffer
+    if (!x->src_buffer_ref) {
+        x->src_buffer_ref = buffer_ref_new((t_object *)x, x->wavename);
+    } else {
+        buffer_ref_set(x->src_buffer_ref, x->wavename);
+    }
+
+    // Attach dub buffer (Fixed: properly sets dub_buffer_ref)
+    if (!x->dub_buffer_ref) {
+        x->dub_buffer_ref = buffer_ref_new((t_object *)x, dubname);
+    } else {
+        buffer_ref_set(x->dub_buffer_ref, dubname);
+    }
+    
+    dubbuf = buffer_ref_getobject(x->dub_buffer_ref);
+    srcbuf = buffer_ref_getobject(x->src_buffer_ref);
+  
+    if (dubbuf == NULL) {
+        post("%s: buffer %s is null", OBJECT_NAME, dubname->s_name);
+        return;
+    }
+    if (srcbuf == NULL) {
+        post("%s: buffer %s is null", OBJECT_NAME, x->wavename->s_name);
+        return;
+    }
+    
+    if (buffer_getchannelcount(dubbuf) != buffer_getchannelcount(srcbuf)) {
+        error("%s: channel mismatch between %s (%ld chans) and %s (%ld chans)",
+              OBJECT_NAME, x->wavename->s_name, buffer_getchannelcount(srcbuf),
+              dubname->s_name, buffer_getchannelcount(dubbuf));
+        return;
+    }
+    
+    sust_frames = seg_frames - (fadein_frames + fadeout_frames);
+    if (sust_frames < 0) {
+        error("%s: fadein + fadeout is greater than duration", OBJECT_NAME);
+        return;
+    }
+    if (skipin_frames + seg_frames > buffer_getframecount(dubbuf)) {
+        error("%s: segment duration + skip exceeds duration of dub buffer", OBJECT_NAME);
+        return;
+    }
+    if (skipout_frames + seg_frames > buffer_getframecount(srcbuf)) {
+        error("%s: segment duration + skip exceeds duration of destination buffer", OBJECT_NAME);
+        return;
+    }
+    if (skipin_frames < 0 || skipout_frames < 0) {
+        error("%s: negative skip time detected", OBJECT_NAME);
+        return;
+    }
+    if (seg_frames <= 0) {
+        error("%s: zero sized segment requested", OBJECT_NAME);
+        return; // Fixed: added return
+    }
+    
+    b_nchans = buffer_getchannelcount(srcbuf);
+    thisbufsamps = buffer_locksamples(srcbuf);
+    dubsourcesamps = buffer_locksamples(dubbuf);
+    
+    if (!thisbufsamps || !dubsourcesamps) {
+        if (thisbufsamps) buffer_unlocksamples(srcbuf);
+        if (dubsourcesamps) buffer_unlocksamples(dubbuf);
+        return;
+    }
+    
+    for (i = 0; i < fadein_frames; i++, skipin_frames++, skipout_frames++) {
+        evpval = ((float) i / (float) fadein_frames) * gain;
+        for (j = 0; j < b_nchans; j++) {
+            thisbufsamps[skipout_frames * b_nchans + j] += dubsourcesamps[skipin_frames * b_nchans + j] * evpval;
+        }
+    }
+    for (i = 0; i < sust_frames; i++, skipin_frames++, skipout_frames++) {
+        for (j = 0; j < b_nchans; j++) {
+            thisbufsamps[skipout_frames * b_nchans + j] += dubsourcesamps[skipin_frames * b_nchans + j] * gain;
+        }
+    }
+    for (i = 0; i < fadeout_frames; i++, skipin_frames++, skipout_frames++) {
+        evpval = ((float) (fadeout_frames - i) / (float) fadeout_frames) * gain;
+        for (j = 0; j < b_nchans; j++) {
+            thisbufsamps[skipout_frames * b_nchans + j] += dubsourcesamps[skipin_frames * b_nchans + j] * evpval;
+        }
+    }
+    
+    buffer_unlocksamples(srcbuf);
+    buffer_unlocksamples(dubbuf);
+    
+    // Fixed: only one buffet_update call
+    buffet_update(x);
 }
 
 long ms2frames( long msdur, float sr )
@@ -637,13 +750,7 @@ void buffet_pevents(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 	float mindiff, maxdiff, absdiff,rmsdiff;
 	float *analbuf = x->analbuf;
 	float *onset = x->onset;
-	//float endtime;
-/*
-	buffet_setbuf(x, x->wavename);
-	b_samples = x->wavebuf->b_samples;
-	b_nchans = x->wavebuf->b_nchans;
-	b_frames = x->wavebuf->b_frames;
-*/
+
     if(!x->src_buffer_ref){
         x->src_buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
     } else{
@@ -1253,6 +1360,7 @@ void buffet_minswap(t_buffet *x, double f)
 	//	post("min set to %f samples",x->minframes);
 }
 
+/*
 void buffet_maxswap(t_buffet *x, double f)
 {
 	long oldmem;
@@ -1274,6 +1382,23 @@ void buffet_maxswap(t_buffet *x, double f)
 		x->storage = (float *) t_resizebytes((char *)x->storage, oldmem, x->storage_bytes);
 	}
 	x->maxframes = newframes;
+}
+*/
+void buffet_maxswap(t_buffet *x, double f)
+{
+    long newframes = f * .001 * x->sr;
+    if (newframes <= x->minframes) {
+        error("%s: max blocksize must exceed minimum blocksize, which is %f ms",
+              OBJECT_NAME, 1000. * x->minframes / x->sr);
+        return; // Prevents invalid maxframes assignment
+    }
+    
+    if (newframes > x->storage_maxframes) {
+        x->storage_maxframes = newframes;
+        x->storage_bytes = (x->storage_maxframes + 1) * 2 * sizeof(float);
+        x->storage = (float *) sysmem_resizeptr((void *)x->storage, x->storage_bytes);
+    }
+    x->maxframes = newframes;
 }
 
 void buffet_erase(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
@@ -1854,6 +1979,7 @@ void *buffet_new(t_symbol *msg, short argc, t_atom *argv)
     return x;
 }
 
+/*
 void buffet_init(t_buffet *x, short initialized)
 {
 	if(x->minframes <= 0)
@@ -1884,7 +2010,37 @@ void buffet_init(t_buffet *x, short initialized)
 		x->rmsbuf = (float *)sysmem_resizeptrclear((void *)x->rmsbuf,MAX_RMS_BUFFER * x->sr * sizeof(float));
 	}
 }
+*/
 
+void buffet_init(t_buffet *x, short initialized)
+{
+    if (x->minframes <= 0)
+        x->minframes = 250;
+    if (x->maxframes <= 0)
+        x->maxframes = 1000;
+    
+    if (!initialized) {
+        x->minframes *= .001 * x->sr;
+        x->maxframes *= .001 * x->sr;
+        x->storage_maxframes = x->maxframes;
+        x->fade = .001 * 20 * x->sr; // 20 ms fadetime to start
+        x->storage_bytes = (x->maxframes + 1) * 2 * sizeof(float); // stereo storage frames
+        x->storage = (float *) sysmem_newptr(x->storage_bytes);
+        x->dc_coef = .995; // for dc blocker
+        x->dc_gain = 4.0;
+        x->rmsbuf = (float *) sysmem_newptrclear(MAX_RMS_BUFFER * x->sr * sizeof(float));
+        x->listdata = (t_atom *) sysmem_newptr(MAX_EVENTS * sizeof(t_atom));
+        x->analbuf = (float *) sysmem_newptrclear(MAX_RMS_FRAMES * sizeof(float));
+        x->onset = (float *) sysmem_newptr(MAX_EVENTS * sizeof(float));
+        x->initialized = 1;
+    } else {
+        // Re-calculate based on current sample rate if needed
+        x->storage_maxframes = x->maxframes;
+        x->storage_bytes = (x->storage_maxframes + 1) * 2 * sizeof(float);
+        x->storage = (float *) sysmem_resizeptr((void *)x->storage, x->storage_bytes);
+        x->rmsbuf = (float *) sysmem_resizeptrclear((void *)x->rmsbuf, MAX_RMS_BUFFER * x->sr * sizeof(float));
+    }
+}
 
 void buffet_nosync_setswap(t_buffet *x)
 {	
@@ -2443,11 +2599,21 @@ void buffet_dblclick(t_buffet *x)
     buffer_view(buffer_ref_getobject(x->src_buffer_ref));
 }
 
+/*
 void buffet_setbuf(t_buffet *x, t_symbol *wavename)
 {
 	x->wavename = wavename;	
 }
-
+*/
+void buffet_setbuf(t_buffet *x, t_symbol *wavename)
+{
+    x->wavename = wavename;
+    if (x->src_buffer_ref) {
+        buffer_ref_set(x->src_buffer_ref, wavename);
+    } else {
+        x->src_buffer_ref = buffer_ref_new((t_object *)x, wavename);
+    }
+}
 
 void buffet_catbuf(t_buffet *x, t_symbol *msg, short argc, t_atom *argv)
 {
@@ -2551,51 +2717,6 @@ float buffet_boundrand(float min, float max)
 	return min + (max-min) * ((float) (rand() % RAND_MAX)/ (float) RAND_MAX);
 }
 
-/*
-void buffet_dsp_free(t_buffet *x)
-{
-	dsp_free((t_pxobject *)x);
-	sysmem_freeptr(x->storage);
-	sysmem_freeptr(x->listdata);
-	sysmem_freeptr(x->rmsbuf);
-	sysmem_freeptr(x->analbuf);
-	sysmem_freeptr(x->onset);
-    // object_free(x->src_buffer_ref);
-    // object_free(x->dest_buffer_ref);
-}
-*/
-
-/*
-void buffet_dsp_free(t_buffet *x)
-{
-    dsp_free((t_pxobject *)x);
-    
-    // Free dynamic memory
-    sysmem_freeptr(x->storage);
-    sysmem_freeptr(x->listdata);
-    sysmem_freeptr(x->rmsbuf);
-    sysmem_freeptr(x->analbuf);
-    sysmem_freeptr(x->onset);
-    
-    // Unregister and free all buffer references
-    if (x->src_buffer_ref) {
-        object_free(x->src_buffer_ref);
-        x->src_buffer_ref = NULL;
-    }
-    if (x->dest_buffer_ref) {
-        object_free(x->dest_buffer_ref);
-        x->dest_buffer_ref = NULL;
-    }
-    if (x->cat_buffer_ref) {
-        object_free(x->cat_buffer_ref);
-        x->cat_buffer_ref = NULL;
-    }
-    if (x->dub_buffer_ref) {
-        object_free(x->dub_buffer_ref);
-        x->dub_buffer_ref = NULL;
-    }
-}
-*/
 
 void buffet_dsp_free(t_buffet *x)
 {
@@ -2642,6 +2763,7 @@ void buffet_dsp_free(t_buffet *x)
     }
 }
 
+/*
 void buffet_resize(t_buffet *x, t_floatarg newsize)
 {
 	short argc = 1;
@@ -2666,6 +2788,26 @@ void buffet_resize(t_buffet *x, t_floatarg newsize)
     	error("%s: no such buffer~ %s", OBJECT_NAME, x->wavename->s_name);
 	}
 }
+*/
+
+void buffet_resize(t_buffet *x, t_floatarg newsize)
+{
+    t_atom argv;
+    atom_setfloat(&argv, newsize);
+
+    if (!x->src_buffer_ref) {
+        x->src_buffer_ref = buffer_ref_new((t_object *)x, x->wavename);
+    } else {
+        buffer_ref_set(x->src_buffer_ref, x->wavename);
+    }
+    
+    t_buffer_obj *b = buffer_ref_getobject(x->src_buffer_ref);
+    if (b != NULL) {
+        typedmess((void *)b, gensym("size"), 1, &argv);
+    } else {
+        error("%s: no such buffer~ %s", OBJECT_NAME, x->wavename->s_name);
+    }
+}
 
 void buffet_assist (t_buffet *x, void *b, long msg, long arg, char *dst)
 {
@@ -2681,14 +2823,30 @@ void buffet_assist (t_buffet *x, void *b, long msg, long arg, char *dst)
 		}  
 	}
 }
-
+/*
 t_max_err buffet_notify(t_buffet *x, t_symbol *s, t_symbol *msg, void *sender, void *data)
 {
 //    buffer_ref_notify(x->dest_buffer_ref, s, msg, sender, data);
     return buffer_ref_notify(x->src_buffer_ref, s, msg, sender, data);
 }
+*/
 
-
+t_max_err buffet_notify(t_buffet *x, t_symbol *s, t_symbol *msg, void *sender, void *data)
+{
+    if (x->dest_buffer_ref) {
+        buffer_ref_notify(x->dest_buffer_ref, s, msg, sender, data);
+    }
+    if (x->cat_buffer_ref) {
+        buffer_ref_notify(x->cat_buffer_ref, s, msg, sender, data);
+    }
+    if (x->dub_buffer_ref) {
+        buffer_ref_notify(x->dub_buffer_ref, s, msg, sender, data);
+    }
+    if (x->src_buffer_ref) {
+        return buffer_ref_notify(x->src_buffer_ref, s, msg, sender, data);
+    }
+    return MAX_ERR_NONE;
+}
 
 
 
