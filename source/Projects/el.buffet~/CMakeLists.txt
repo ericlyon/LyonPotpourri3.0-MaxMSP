@@ -10,7 +10,7 @@ include_directories(
 add_library(
     "${PROJECT_NAME}"
     MODULE
-    "buffet~ copy.c"
+    "buffet~.c"
 )
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/../../max-sdk-base/script/max-posttarget.cmake)

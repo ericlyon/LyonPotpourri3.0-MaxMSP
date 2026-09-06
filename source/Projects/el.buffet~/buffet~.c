@@ -1764,7 +1764,7 @@ void buffet_killdc(t_buffet *x)
 	exit: buffer_unlocksamples(wavebuf_b);
 }
 
-
+/*
 void *buffet_new(t_symbol *msg, short argc, t_atom *argv)
 {
     t_buffet *x = (t_buffet *)object_alloc(buffet_class);
@@ -1799,6 +1799,59 @@ void *buffet_new(t_symbol *msg, short argc, t_atom *argv)
     
 	buffet_init(x,0);
 	return x;
+}
+*/
+
+void *buffet_new(t_symbol *msg, short argc, t_atom *argv)
+{
+    t_buffet *x = (t_buffet *)object_alloc(buffet_class);
+    
+    // Explicitly initialize all buffer references to NULL
+    x->src_buffer_ref = NULL;
+    x->dest_buffer_ref = NULL;
+    x->cat_buffer_ref = NULL;
+    x->dub_buffer_ref = NULL;
+    x->storage = NULL;
+    x->rmsbuf = NULL;
+    x->listdata = NULL;
+    x->analbuf = NULL;
+    x->onset = NULL;
+
+    srand(clock());
+    dsp_setup((t_pxobject *)x, 0);
+    x->floater = floatout((t_pxobject *)x);
+    x->list = listout((t_pxobject *)x);
+    x->bang = bangout((t_pxobject *)x);
+
+    x->sr = sys_getsr();
+    if (!x->sr)
+        x->sr = 44100;
+
+    if (argc < 1) {
+        error("%s: you must provide a valid buffer name", OBJECT_NAME);
+        return NIL;
+    }
+    
+    x->minframes = 0;
+    x->maxframes = 0;
+    atom_arg_getsym(&x->wavename, 0, argc, argv);
+    
+    // Create the primary buffer reference on init
+    x->src_buffer_ref = buffer_ref_new((t_object *)x, x->wavename);
+    
+    if (argc >= 2)
+        atom_arg_getfloat(&x->minframes, 1, argc, argv);
+    if (argc >= 3)
+        atom_arg_getfloat(&x->maxframes, 2, argc, argv);
+    if (!x->minframes)
+        x->minframes = 100;
+    if (!x->maxframes)
+        x->maxframes = x->minframes + 10;
+
+    x->initialized = 0;
+    buffet_init(x, 0);
+    
+    return x;
 }
 
 void buffet_init(t_buffet *x, short initialized)
@@ -2498,6 +2551,7 @@ float buffet_boundrand(float min, float max)
 	return min + (max-min) * ((float) (rand() % RAND_MAX)/ (float) RAND_MAX);
 }
 
+/*
 void buffet_dsp_free(t_buffet *x)
 {
 	dsp_free((t_pxobject *)x);
@@ -2508,6 +2562,84 @@ void buffet_dsp_free(t_buffet *x)
 	sysmem_freeptr(x->onset);
     // object_free(x->src_buffer_ref);
     // object_free(x->dest_buffer_ref);
+}
+*/
+
+/*
+void buffet_dsp_free(t_buffet *x)
+{
+    dsp_free((t_pxobject *)x);
+    
+    // Free dynamic memory
+    sysmem_freeptr(x->storage);
+    sysmem_freeptr(x->listdata);
+    sysmem_freeptr(x->rmsbuf);
+    sysmem_freeptr(x->analbuf);
+    sysmem_freeptr(x->onset);
+    
+    // Unregister and free all buffer references
+    if (x->src_buffer_ref) {
+        object_free(x->src_buffer_ref);
+        x->src_buffer_ref = NULL;
+    }
+    if (x->dest_buffer_ref) {
+        object_free(x->dest_buffer_ref);
+        x->dest_buffer_ref = NULL;
+    }
+    if (x->cat_buffer_ref) {
+        object_free(x->cat_buffer_ref);
+        x->cat_buffer_ref = NULL;
+    }
+    if (x->dub_buffer_ref) {
+        object_free(x->dub_buffer_ref);
+        x->dub_buffer_ref = NULL;
+    }
+}
+*/
+
+void buffet_dsp_free(t_buffet *x)
+{
+    dsp_free((t_pxobject *)x);
+    
+    // Free allocated memory buffers
+    if (x->storage) {
+        sysmem_freeptr(x->storage);
+        x->storage = NULL;
+    }
+    if (x->listdata) {
+        sysmem_freeptr(x->listdata);
+        x->listdata = NULL;
+    }
+    if (x->rmsbuf) {
+        sysmem_freeptr(x->rmsbuf);
+        x->rmsbuf = NULL;
+    }
+    if (x->analbuf) {
+        sysmem_freeptr(x->analbuf);
+        x->analbuf = NULL;
+    }
+    if (x->onset) {
+        sysmem_freeptr(x->onset);
+        x->onset = NULL;
+    }
+
+    // Only free buffer refs if they were actually allocated!
+    if (x->src_buffer_ref != NULL) {
+        object_free(x->src_buffer_ref);
+        x->src_buffer_ref = NULL;
+    }
+    if (x->dest_buffer_ref != NULL) {
+        object_free(x->dest_buffer_ref);
+        x->dest_buffer_ref = NULL;
+    }
+    if (x->cat_buffer_ref != NULL) {
+        object_free(x->cat_buffer_ref);
+        x->cat_buffer_ref = NULL;
+    }
+    if (x->dub_buffer_ref != NULL) {
+        object_free(x->dub_buffer_ref);
+        x->dub_buffer_ref = NULL;
+    }
 }
 
 void buffet_resize(t_buffet *x, t_floatarg newsize)
