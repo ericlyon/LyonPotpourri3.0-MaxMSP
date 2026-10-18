@@ -122,7 +122,7 @@ int C74_EXPORT main(void)
     granule_class = c;
 
     potpourri_announce(OBJECT_NAME);
-    post("updated version of granule~\n");
+    // post("updated version of granule~\n");
     return 0;
 }
 

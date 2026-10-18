@@ -2,14 +2,14 @@ LyonPotpourri Change log
 
 Version 3.0.2
 
-Modernized click2float~ for Max 8/9 and fix thread safety
+Modernize click2float~ for Max 8/9 and fix thread safety
 
 - Replace scheduler clock with t_qelem for thread-safe UI outlet emission
 - Add click2float_free destructor to properly clean up qelem and unhook DSP
 - Prevent perform64 execution when signal inlet is disconnected (count[0])
 - Update macOS deployment target to 12.0 for modern Xcode compatibility
 
-Modernized buffet~ for Max 8/9: fix buffer lock leaks, DSP perform routing, and bounds safety
+Modernize buffet~ for Max 8/9: fix buffer lock leaks, DSP perform routing, and bounds safety
 
 - Eliminate buffer lock leaks: ensure buffer_unlocksamples() is guaranteed across all early returns and error conditions.
 - Fix 64-bit perform routine: configure dsp_setup with 1 signal inlet for groove sync and eliminate invalid dereference of nonexistent signal outlets in perform64.
@@ -19,9 +19,12 @@ Modernized buffet~ for Max 8/9: fix buffer lock leaks, DSP perform routing, and 
 - Fix trimzero completion logic: ensure completion bang fires on no-op/silent buffers and correctly handle leading/trailing silence trimming.
 - Modernize method signatures to use long argc in conformance with Max 8/9 SDK standards.
 
-el.granule~
-Memory & Teardown Safety: Fixed an omitted destructor in class_new that previously caused every deleted instance to leak all internal grain arrays, scale grids, and buffer_ref instances. Structured teardown to decouple DSP before freeing heap memory.
-Zero-Frame & Null Buffer Protection: Prevented hard crashes and infinite loop lockups in the 64-bit perform routine when assigned empty, missing, or multi-channel buffers.
-Buffer Initialization Fix: Resolved an issue in setbuf where the window buffer was improperly checked against the wavetable pointer, preventing null dereference crashes when invalid buffer names were passed.
-Dynamic Buffer Notification: Added notify callback support so changes to underlying buffer~ objects (reloading sound files, resizing, or clearing) are immediately reflected without stale pointer crashes.
-Mute Support: Formally exposed the mute message in main() and wired it into perform64 to drop CPU load to 0% when bypassed.
+Modernize granule~ for Max 8/9: fix memory leaks, buffer lifecycle crashes, and mute handling
+
+- Register granule_dsp_free in class_new to eliminate severe memory leaks of grain structures, pitch grids, and buffer reference handles upon deletion.
+- Fix null dereference and infinite loop in granule_perform64 when encountering empty (zero-frame) or invalid buffers.
+- Fix copy-paste bug in granule_setbuf: properly bind and validate the window buffer independently rather than checking the wavetable twice.
+- Implement granule_notify callback to ensure dynamic buffer reloads, resizing, and replacements are tracked cleanly.
+- Register and implement the "mute" message in main() and perform64 to bypass DSP calculation when inactive.
+- Harden message handling: add bounds checks across grain, grist, and setscale routines to prevent out-of-bounds atom reads.
+- Modernize memory management from legacy t_getbytes/t_freebytes to sysmem_newptrclear and sysmem_freeptr.
