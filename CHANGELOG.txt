@@ -1,0 +1,10 @@
+LyonPotpourri Change log
+
+Version 3.0.2
+
+Modernized click2float~ for Max 8/9 and fix thread safety
+
+- Replace scheduler clock with t_qelem for thread-safe UI outlet emission
+- Add click2float_free destructor to properly clean up qelem and unhook DSP
+- Prevent perform64 execution when signal inlet is disconnected (count[0])
+- Update macOS deployment target to 12.0 for modern Xcode compatibility

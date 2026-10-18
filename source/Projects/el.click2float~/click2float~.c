@@ -47,7 +47,6 @@ int C74_EXPORT main(void)
     click2float_class = c;
 
     potpourri_announce(OBJECT_NAME);
-    post("updated version of click2float~\n");
     return 0;
 }
 
