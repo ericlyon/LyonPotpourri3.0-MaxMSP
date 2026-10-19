@@ -1,76 +1,124 @@
+/**
+ * @file buffi~.c
+ * @brief Dynamic buffer interpolation and function generation external for Max 8/9.
+ * Modernized for 64-bit dsp64, memory safety, and buffer lock symmetry.
+ */
+
 #include "MSPd.h"
 #include <stdlib.h>
+#include <math.h>
 
 #define OBJECT_NAME "buffi~"
 
 static t_class *buffi_class;
 
-typedef struct _buffi
-{
+typedef struct _buffi {
     t_pxobject x_obj;
-    t_symbol *src1; // name of src1 buffer
-    t_symbol *src2; // name of src2 buffer
-    t_symbol *dest; // name of dest buffer
-    t_buffer_ref *src1_buffer_ref; // MSP reference to the buffer
-    t_buffer_ref *src2_buffer_ref; // MSP reference to the buffer
-    t_buffer_ref *dest_buffer_ref; // MSP reference to source buffer
-    float *warpfunc; // temporary holder for the warp functions
+    t_symbol *src1;
+    t_symbol *src2;
+    t_symbol *dest;
+    t_buffer_ref *src1_buffer_ref;
+    t_buffer_ref *src2_buffer_ref;
+    t_buffer_ref *dest_buffer_ref;
 } t_buffi;
 
-void *buffi_new(t_symbol *msg, short argc, t_atom *argv);
-void buffi_assist (t_buffi *x, void *b, long msg, long arg, char *dst);
+/* Prototypes */
+void *buffi_new(t_symbol *msg, long argc, t_atom *argv);
+void buffi_free(t_buffi *x);
+void buffi_assist(t_buffi *x, void *b, long msg, long arg, char *dst);
 void buffi_dsp64(t_buffi *x, t_object *dsp64, short *count, double sr, long n, long flags);
 void buffi_perform64(t_buffi *x, t_object *dsp64, double **ins,
-                      long numins, double **outs,long numouts, long n,
+                      long numins, double **outs, long numouts, long n,
                       long flags, void *userparam);
 t_max_err buffi_notify(t_buffi *x, t_symbol *s, t_symbol *msg, void *sender, void *data);
 void buffi_doset(t_buffi *x);
-void buffi_set(t_buffi *x, t_symbol *s);
-double buffi_randf( double min, double max );
-void buffi_autofunc(t_buffi *x, t_floatarg minval, t_floatarg maxval, t_symbol *buffername);
 void buffi_reset(t_buffi *x, t_symbol *src1, t_symbol *src2, t_symbol *dest);
-void buffi_autospike(t_buffi *x, t_symbol *msg, short argc, t_atom *argv);
-void buffi_autoexpfunc(t_buffi *x, t_symbol *msg, short argc, t_atom *argv);
-void buffi_autocurvefunc(t_buffi *x, t_symbol *msg, short argc, t_atom *argv);
+double buffi_randf(double min, double max);
+void buffi_autofunc(t_buffi *x, double minval, double maxval, t_symbol *buffername);
+void buffi_autoexpfunc(t_buffi *x, t_symbol *msg, long argc, t_atom *argv);
+void buffi_autocurvefunc(t_buffi *x, t_symbol *msg, long argc, t_atom *argv);
+void buffi_autospike(t_buffi *x, t_symbol *msg, long argc, t_atom *argv);
 
 int C74_EXPORT main(void)
 {
-	t_class *c;
-	c = class_new("el.buffi~", (method)buffi_new, (method)dsp_free, sizeof(t_buffi), 0,A_GIMME, 0);
-    class_addmethod(c,(method)buffi_assist,"assist", A_CANT, 0);
-    class_addmethod(c, (method)buffi_dsp64, "dsp64", A_CANT, 0);
-    class_addmethod(c, (method)buffi_notify, "notify", A_CANT, 0);
-    class_addmethod(c, (method)buffi_autofunc, "autofunc", A_FLOAT, A_FLOAT, A_SYM, 0);
-    class_addmethod(c, (method)buffi_autospike, "autospike", A_GIMME, 0);
-    class_addmethod(c, (method)buffi_autoexpfunc, "autoexpfunc", A_GIMME, 0);
+    t_class *c = class_new("el.buffi~", 
+                           (method)buffi_new, 
+                           (method)buffi_free, 
+                           (long)sizeof(t_buffi), 
+                           0L, 
+                           A_GIMME, 
+                           0);
+
+    class_addmethod(c, (method)buffi_assist,        "assist",        A_CANT, 0);
+    class_addmethod(c, (method)buffi_dsp64,         "dsp64",         A_CANT, 0);
+    class_addmethod(c, (method)buffi_notify,        "notify",        A_CANT, 0);
+    class_addmethod(c, (method)buffi_autofunc,      "autofunc",      A_FLOAT, A_FLOAT, A_SYM, 0);
+    class_addmethod(c, (method)buffi_autospike,     "autospike",     A_GIMME, 0);
+    class_addmethod(c, (method)buffi_autoexpfunc,   "autoexpfunc",   A_GIMME, 0);
     class_addmethod(c, (method)buffi_autocurvefunc, "autocurvefunc", A_GIMME, 0);
-    class_addmethod(c, (method)buffi_reset, "reset", A_SYM, A_SYM, A_SYM, 0);
-	class_dspinit(c);
-	class_register(CLASS_BOX, c);
-	buffi_class = c;
-	potpourri_announce(OBJECT_NAME);
-	return 0;
+    class_addmethod(c, (method)buffi_reset,         "reset",         A_SYM, A_SYM, A_SYM, 0);
+
+    class_dspinit(c);
+    class_register(CLASS_BOX, c);
+    buffi_class = c;
+
+    potpourri_announce(OBJECT_NAME);
+    return 0;
 }
 
-void *buffi_new(t_symbol *msg, short argc, t_atom *argv)
+double buffi_randf(double min, double max)
+{
+    return min + (max - min) * ((double)rand() / (double)RAND_MAX);
+}
+
+void *buffi_new(t_symbol *msg, long argc, t_atom *argv)
 {
     t_buffi *x = (t_buffi *)object_alloc(buffi_class);
+    if (!x) return NULL;
 
-    dsp_setup((t_pxobject *)x,1);
-    outlet_new((t_object *)x, "signal");
-    
-    if(argc < 3){
-        error("%s: you must provide three buffer names: src1, src2, and dest",OBJECT_NAME);
-        return NIL;
+    dsp_setup((t_pxobject *)x, 1);       // 1 Signal inlet (interpolation phase)
+    outlet_new((t_object *)x, "signal"); // 1 Signal output
+
+    // CRITICAL: Prevent Max from sharing memory between ins[0] and outs[0]!
+    x->x_obj.z_misc |= Z_NO_INPLACE;
+
+    x->src1 = gensym("");
+    x->src2 = gensym("");
+    x->dest = gensym("");
+    x->src1_buffer_ref = NULL;
+    x->src2_buffer_ref = NULL;
+    x->dest_buffer_ref = NULL;
+
+    if (argc < 3) {
+        object_error((t_object *)x, "%s: requires three buffer names: src1, src2, dest", OBJECT_NAME);
+        return x;
     }
-    atom_arg_getsym(&x->src1,0,argc,argv);
-    atom_arg_getsym(&x->src2,1,argc,argv);
-    atom_arg_getsym(&x->dest,2,argc,argv);
-    buffi_set(x, msg);
-    srand(clock());
+
+    atom_arg_getsym(&x->src1, 0, argc, argv);
+    atom_arg_getsym(&x->src2, 1, argc, argv);
+    atom_arg_getsym(&x->dest, 2, argc, argv);
+
+    buffi_doset(x);
     return x;
 }
 
+void buffi_free(t_buffi *x)
+{
+    dsp_free((t_pxobject *)x);
+
+    if (x->src1_buffer_ref) {
+        object_free(x->src1_buffer_ref);
+        x->src1_buffer_ref = NULL;
+    }
+    if (x->src2_buffer_ref) {
+        object_free(x->src2_buffer_ref);
+        x->src2_buffer_ref = NULL;
+    }
+    if (x->dest_buffer_ref) {
+        object_free(x->dest_buffer_ref);
+        x->dest_buffer_ref = NULL;
+    }
+}
 
 void buffi_reset(t_buffi *x, t_symbol *src1, t_symbol *src2, t_symbol *dest)
 {
@@ -91,387 +139,379 @@ void buffi_doset(t_buffi *x)
         x->src2_buffer_ref = buffer_ref_new((t_object *)x, x->src2);
     else
         buffer_ref_set(x->src2_buffer_ref, x->src2);
-    
+
     if (!x->dest_buffer_ref)
         x->dest_buffer_ref = buffer_ref_new((t_object *)x, x->dest);
     else
         buffer_ref_set(x->dest_buffer_ref, x->dest);
 }
 
-void buffi_set(t_buffi *x, t_symbol *s)
-{
-    defer(x, (method)buffi_doset, s, 0, NULL);
-}
-
 void buffi_perform64(t_buffi *x, t_object *dsp64, double **ins, long numins, double **outs, long numouts, long sampleframes, long flags, void *userparam)
 {
-    t_double	*in = ins[0];
-    t_double	*out = outs[0];
-    t_float		*src1tab,*src2tab,*desttab;
-    long src1nc, src2nc, destnc;
-    long src1frames, src2frames, destframes;
-    double		phase;
-    int i,j;
-    long dexter;
-    float hybrid; // Max buffers are still 32-bit
-    
-    t_buffer_obj	*src1 = buffer_ref_getobject(x->src1_buffer_ref);
-    t_buffer_obj	*src2 = buffer_ref_getobject(x->src2_buffer_ref);
-    t_buffer_obj	*dest = buffer_ref_getobject(x->dest_buffer_ref);
-    
-    src1tab = buffer_locksamples(src1);
-    src2tab = buffer_locksamples(src2);
-    desttab = buffer_locksamples(dest);
-    if (!src1tab || !src2tab || !desttab){
-        goto zero;
+    t_double *in  = ins[0];
+    t_double *out = outs[0];
 
-    }
-    src1frames = buffer_getframecount(src1);
-    src1nc = buffer_getchannelcount(src1);
-    src2frames = buffer_getframecount(src2);
-    src2nc = buffer_getchannelcount(src2);
-    destframes = buffer_getframecount(dest);
-    destnc = buffer_getchannelcount(dest);
-    
-    // test for lengths match (otherwise jet)
-    
-    if( (src1frames != destframes) || (src2frames != destframes) ){
-        goto zero;
-    }
-    
-    // test for channels match
+    // STEP 1: Read incoming interpolation phase FIRST before zeroing output memory
+    double phase = in[0];
+    if (phase < 0.0) phase = 0.0;
+    else if (phase > 1.0) phase = 1.0;
 
-    if( (src1nc != src2nc) || (src2nc != destnc) ){
-        goto zero;
-    }
-    
-    phase = *in; // only read the first sample of the vector
-
-  
-    for(i = 0; i < src1frames; i++){
-        for(j = 0; j < src1nc; j++){
-            dexter = (i*src1nc) + j;
-            hybrid = (src1tab[dexter] * phase) + (src2tab[dexter] * (1 - phase));
-            desttab[dexter] = hybrid;
-        }
+    // STEP 2: Clear output buffer
+    for (long i = 0; i < sampleframes; i++) {
+        out[i] = 0.0;
     }
 
-    
+    t_buffer_obj *src1 = x->src1_buffer_ref ? buffer_ref_getobject(x->src1_buffer_ref) : NULL;
+    t_buffer_obj *src2 = x->src2_buffer_ref ? buffer_ref_getobject(x->src2_buffer_ref) : NULL;
+    t_buffer_obj *dest = x->dest_buffer_ref ? buffer_ref_getobject(x->dest_buffer_ref) : NULL;
+
+    if (!src1 || !src2 || !dest) return;
+
+    float *src1tab = buffer_locksamples(src1);
+    float *src2tab = buffer_locksamples(src2);
+    float *desttab = buffer_locksamples(dest);
+
+    if (!src1tab || !src2tab || !desttab) {
+        if (src1tab) buffer_unlocksamples(src1);
+        if (src2tab) buffer_unlocksamples(src2);
+        if (desttab) buffer_unlocksamples(dest);
+        return;
+    }
+
+    long src1frames = buffer_getframecount(src1);
+    long src1nc     = buffer_getchannelcount(src1);
+    long src2frames = buffer_getframecount(src2);
+    long src2nc     = buffer_getchannelcount(src2);
+    long destframes = buffer_getframecount(dest);
+    long destnc     = buffer_getchannelcount(dest);
+
+    // Verify dimension matching
+    if (src1frames != destframes || src2frames != destframes || 
+        src1nc != destnc || src2nc != destnc || destframes <= 0) {
+        buffer_unlocksamples(src1);
+        buffer_unlocksamples(src2);
+        buffer_unlocksamples(dest);
+        return;
+    }
+
+    float p1 = (float)phase;
+    float p2 = 1.0f - p1;
+
+    long total_samples = src1frames * src1nc;
+    for (long i = 0; i < total_samples; i++) {
+        desttab[i] = (src1tab[i] * p1) + (src2tab[i] * p2);
+    }
+
     buffer_unlocksamples(src1);
     buffer_unlocksamples(src2);
     buffer_unlocksamples(dest);
-    return;
-zero:
-    for(i = 0; i < sampleframes; i++){
-        *out++ = 0.0;
-    }
 }
 
 void buffi_dsp64(t_buffi *x, t_object *dsp64, short *count, double samplerate, long maxvectorsize, long flags)
 {
+    if (samplerate <= 0.0) return;
+    buffi_doset(x);
     dsp_add64(dsp64, (t_object *)x, (t_perfroutine64)buffi_perform64, 0, NULL);
 }
 
-void buffi_assist (t_buffi *x, void *b, long msg, long arg, char *dst)
+void buffi_assist(t_buffi *x, void *b, long msg, long arg, char *dst)
 {
-	if (msg==1) {
-		switch (arg) {
-			case 0: sprintf(dst,"(mesages) Buffer Interpolation Value [0-1]"); break;
-    	}
-	}
-    // nothing interesting at the output
+    if (msg == ASSIST_INLET) {
+        strncpy_zero(dst, "(signal) Buffer Interpolation Phase [0.0 - 1.0]", 256);
+    } else if (msg == ASSIST_OUTLET) {
+        strncpy_zero(dst, "(signal) Pass-Through (Unused)", 256);
+    }
 }
 
-
-
-void buffi_autoexpfunc(t_buffi *x, t_symbol *msg, short argc, t_atom *argv)
+void buffi_autofunc(t_buffi *x, double minval, double maxval, t_symbol *buffername)
 {
-    int minpoints, maxpoints, segpoints, i;
-    int pointcount = 0;
-    double target, lastval;
-    double linval, oMin, oMax, curved;
-    double m1, m2;
-    t_buffer_ref *tablebuf_ref;
-    t_buffer_obj *dbuf;
-    long b_nchans;
-    long b_frames;
-    float *b_samples;
-    double minval, maxval;
-    t_symbol *buffername;
-    
-    /////
-    minval = atom_getfloatarg(0,argc,argv);
-    maxval = atom_getfloatarg(1,argc,argv);
-    buffername = atom_getsymarg(2,argc,argv);
-    // oMin = minval;
-    //oMax = maxval; // redundant if this works
-    if(minval <= 0){
-        minval = 0.000001;
-    }
-    if(maxval <= minval){
-        maxval = minval + 0.01;
-    }
-    
-    tablebuf_ref = buffer_ref_new((t_object*)x, buffername);
-    dbuf = buffer_ref_getobject(tablebuf_ref);
-    if(dbuf == NULL){
-        object_post((t_object*)x,"%s: nonexistent buffer ( %s )",
-                    OBJECT_NAME, buffername->s_name);
+    if (!buffername || buffername == gensym("")) return;
+
+    t_buffer_ref *tablebuf_ref = buffer_ref_new((t_object *)x, buffername);
+    if (!tablebuf_ref) return;
+
+    t_buffer_obj *dbuf = buffer_ref_getobject(tablebuf_ref);
+    if (!dbuf) {
+        object_error((t_object *)x, "%s: nonexistent buffer (%s)", OBJECT_NAME, buffername->s_name);
+        object_free(tablebuf_ref);
         return;
     }
-    b_nchans = buffer_getchannelcount(dbuf);
-    b_frames = buffer_getframecount(dbuf);
-    if(b_nchans != 1){
-        post("%s: table must be mono",OBJECT_NAME);
+
+    long b_nchans = buffer_getchannelcount(dbuf);
+    long b_frames = buffer_getframecount(dbuf);
+    if (b_nchans != 1 || b_frames < 10) {
+        object_error((t_object *)x, "%s: buffer must be mono and have at least 10 frames", OBJECT_NAME);
+        object_free(tablebuf_ref);
         return;
     }
-    x->warpfunc = (float *)sysmem_newptr(b_frames * sizeof(float));
-    
-    minpoints = 0.01 * (float) b_frames;
-    maxpoints = 0.1 * (float) b_frames;
-    if( minval > 1000.0 || minval < .001 ){
-        minval = 0.5;
-    }
-    if( maxval < 0.01 || maxval > 1000.0 ){
-        minval = 2.0;
-    }
-    
-    lastval = buffi_randf(minval, maxval);
-    
-    while( pointcount < b_frames ){
-        target = buffi_randf(minval, maxval);
-        segpoints = minpoints + (rand() % (maxpoints-minpoints));
-        if( pointcount + segpoints > b_frames ){
-            segpoints = b_frames - pointcount;
-        }
-        oMin = lastval;
-        oMax = target;
-        
-        if( lastval < target){
-            oMin = lastval;
-            oMax = target;
-        } else {
-            oMax = lastval;
-            oMin = target;
-        }
-        
-        for( i = 0; i < segpoints; i++ ){
-            m2 = (float)i / (float) segpoints ;
-            m1 = 1.0 - m2;
-            linval = m1 * lastval + m2 * target;
-            curved = pow( oMax/oMin, (linval - oMin)/(oMax - oMin)) * oMin;
-            x->warpfunc[ pointcount + i ] = curved;
-        }
-        lastval = target;
-        pointcount += segpoints;
-    }
-    // buffer stuffer
-    b_samples = buffer_locksamples(dbuf);
-    for(i = 0; i < b_frames; i++){
-        b_samples[i] = x->warpfunc[i];
-    }
-    buffer_unlocksamples(dbuf);
-    sysmem_freeptr( (void *) x->warpfunc );
-    object_method(dbuf, gensym("dirty"));
-}
 
-void buffi_autofunc(t_buffi *x, t_floatarg minval, t_floatarg maxval, t_symbol *buffername)
-{
-    long minpoints, maxpoints, segpoints, i;
+    float *warpfunc = (float *)sysmem_newptr(b_frames * sizeof(float));
+    if (!warpfunc) {
+        object_free(tablebuf_ref);
+        return;
+    }
+
+    long minpoints = (long)(0.01 * (double)b_frames);
+    long maxpoints = (long)(0.10 * (double)b_frames);
+    if (minpoints < 1) minpoints = 1;
+    if (maxpoints <= minpoints) maxpoints = minpoints + 1;
+
+    double lastval = buffi_randf(minval, maxval);
     long pointcount = 0;
-    double target, lastval;
-    double m1, m2;
-    t_buffer_ref *tablebuf_ref;
-    t_buffer_obj *dbuf;
-    long b_nchans;
-    long b_frames;
-    float *b_samples;
-    
-    /////
 
-    tablebuf_ref = buffer_ref_new((t_object*)x, buffername);
+    while (pointcount < b_frames) {
+        double target = buffi_randf(minval, maxval);
+        long range = maxpoints - minpoints;
+        long segpoints = minpoints + (range > 0 ? (rand() % range) : 0);
 
-    dbuf = buffer_ref_getobject(tablebuf_ref);
-    if(dbuf == NULL){
-        object_post((t_object*)x,"%s: nonexistent buffer ( %s )",
-                    OBJECT_NAME, buffername->s_name);
-        return;
-    }
-    b_nchans = buffer_getchannelcount(dbuf);
-    b_frames = buffer_getframecount(dbuf);
-    if(b_nchans != 1){
-        post("%s: table must be mono",OBJECT_NAME);
-        return;
-    }
-    x->warpfunc = (float *)sysmem_newptr(b_frames * sizeof(float));
-    
-    minpoints = 0.01 * (float) b_frames;
-    maxpoints = 0.1 * (float) b_frames;
-    /*
-    if( minval > 1000.0 || minval < .001 ){
-        minval = 0.5;
-    }
-    if( maxval < 0.01 || maxval > 1000.0 ){
-        minval = 2.0;
-    }
-    */
-    lastval = buffi_randf(minval, maxval);
-    // post("automate: min %d max %d",minpoints, maxpoints);
-    while( pointcount < b_frames ){
-        target = buffi_randf(minval, maxval);
-        segpoints = minpoints + (rand() % (maxpoints-minpoints));
-        if( pointcount + segpoints > b_frames ){
+        if (pointcount + segpoints > b_frames) {
             segpoints = b_frames - pointcount;
         }
-        for( i = 0; i < segpoints; i++ ){
-            m2 = (float)i / (float) segpoints ;
-            m1 = 1.0 - m2;
-            x->warpfunc[ pointcount + i ] = m1 * lastval + m2 * target;
+
+        for (long i = 0; i < segpoints; i++) {
+            double m2 = (double)i / (double)segpoints;
+            double m1 = 1.0 - m2;
+            warpfunc[pointcount + i] = (float)(m1 * lastval + m2 * target);
         }
         lastval = target;
         pointcount += segpoints;
     }
-    // buffer stuffer
-    b_samples = buffer_locksamples(dbuf);
-    for(i = 0; i < b_frames; i++){
-        b_samples[i] = x->warpfunc[i];
+
+    float *b_samples = buffer_locksamples(dbuf);
+    if (b_samples) {
+        for (long i = 0; i < b_frames; i++) {
+            b_samples[i] = warpfunc[i];
+        }
+        buffer_unlocksamples(dbuf);
+        object_method((t_object *)dbuf, gensym("dirty"));
     }
-    buffer_unlocksamples(dbuf);
-    sysmem_freeptr( (void *) x->warpfunc );
-    object_method(dbuf, gensym("dirty"));
+
+    sysmem_freeptr(warpfunc);
+    object_free(tablebuf_ref);
 }
 
-
-void buffi_autocurvefunc(t_buffi *x, t_symbol *msg, short argc, t_atom *argv)
+void buffi_autoexpfunc(t_buffi *x, t_symbol *msg, long argc, t_atom *argv)
 {
-    long minpoints, maxpoints, segpoints, i;
+    if (argc < 3) {
+        object_error((t_object *)x, "%s: autoexpfunc requires minval, maxval, buffername", OBJECT_NAME);
+        return;
+    }
+
+    double minval = atom_getfloat(argv);
+    double maxval = atom_getfloat(argv + 1);
+    t_symbol *buffername = atom_getsym(argv + 2);
+
+    if (minval <= 0.0) minval = 0.000001;
+    if (maxval <= minval) maxval = minval + 0.01;
+
+    t_buffer_ref *tablebuf_ref = buffer_ref_new((t_object *)x, buffername);
+    if (!tablebuf_ref) return;
+
+    t_buffer_obj *dbuf = buffer_ref_getobject(tablebuf_ref);
+    if (!dbuf) {
+        object_error((t_object *)x, "%s: nonexistent buffer (%s)", OBJECT_NAME, buffername->s_name);
+        object_free(tablebuf_ref);
+        return;
+    }
+
+    long b_nchans = buffer_getchannelcount(dbuf);
+    long b_frames = buffer_getframecount(dbuf);
+    if (b_nchans != 1 || b_frames < 10) {
+        object_error((t_object *)x, "%s: buffer must be mono and have at least 10 frames", OBJECT_NAME);
+        object_free(tablebuf_ref);
+        return;
+    }
+
+    float *warpfunc = (float *)sysmem_newptr(b_frames * sizeof(float));
+    if (!warpfunc) {
+        object_free(tablebuf_ref);
+        return;
+    }
+
+    long minpoints = (long)(0.01 * (double)b_frames);
+    long maxpoints = (long)(0.10 * (double)b_frames);
+    if (minpoints < 1) minpoints = 1;
+    if (maxpoints <= minpoints) maxpoints = minpoints + 1;
+
+    double lastval = buffi_randf(minval, maxval);
     long pointcount = 0;
-    double target, lastval;
-    double m1, m2;
-    t_buffer_ref *tablebuf_ref;
-    t_buffer_obj *dbuf;
-    long b_nchans;
-    long b_frames;
-    float *b_samples;
-    double minval, maxval, slope, linval;
-    t_symbol *buffername;
-    
-    /////
-    minval = atom_getfloatarg(0,argc,argv);
-    maxval = atom_getfloatarg(1,argc,argv);
-    slope = 1.0 - atom_getfloatarg(2,argc,argv);
-    buffername = atom_getsymarg(3,argc,argv);
-    
-    tablebuf_ref = buffer_ref_new((t_object*)x, buffername);
-    
-    dbuf = buffer_ref_getobject(tablebuf_ref);
-    if(dbuf == NULL){
-        object_post((t_object*)x,"%s: nonexistent buffer ( %s )",
-                    OBJECT_NAME, buffername->s_name);
-        return;
-    }
-    b_nchans = buffer_getchannelcount(dbuf);
-    b_frames = buffer_getframecount(dbuf);
-    if(b_nchans != 1){
-        post("%s: table must be mono",OBJECT_NAME);
-        return;
-    }
-    x->warpfunc = (float *)sysmem_newptr(b_frames * sizeof(float));
-    
-    minpoints = 0.01 * (float) b_frames;
-    maxpoints = 0.1 * (float) b_frames;
-    /*
-    if( minval > 1000.0 || minval < .001 ){
-        minval = 0.001;
-    }
-    if( maxval < 0.01 || maxval > 1000.0 ){
-        maxval = 2.0;
-    }
-    */
-    lastval = buffi_randf(minval, maxval);
-    // post("automate: min %d max %d",minpoints, maxpoints);
-    while( pointcount < b_frames ){
-        target = buffi_randf(minval, maxval);
-        segpoints = minpoints + (rand() % (maxpoints-minpoints));
-        if( pointcount + segpoints > b_frames ){
+
+    while (pointcount < b_frames) {
+        double target = buffi_randf(minval, maxval);
+        long range = maxpoints - minpoints;
+        long segpoints = minpoints + (range > 0 ? (rand() % range) : 0);
+
+        if (pointcount + segpoints > b_frames) {
             segpoints = b_frames - pointcount;
         }
-        for( i = 0; i < segpoints; i++ ){
-            m2 = (float)i / (float) segpoints ;
-            m1 = 1.0 - m2;
-            linval = m1 * lastval + m2 * target;
-            x->warpfunc[ pointcount + i ] = pow(linval,slope);
+
+        double oMin = (lastval < target) ? lastval : target;
+        double oMax = (lastval < target) ? target : lastval;
+        double oDiff = oMax - oMin;
+        if (oDiff <= 0.0) oDiff = 0.00001;
+
+        for (long i = 0; i < segpoints; i++) {
+            double m2 = (double)i / (double)segpoints;
+            double m1 = 1.0 - m2;
+            double linval = m1 * lastval + m2 * target;
+            double curved = pow(oMax / oMin, (linval - oMin) / oDiff) * oMin;
+            warpfunc[pointcount + i] = (float)curved;
         }
         lastval = target;
         pointcount += segpoints;
     }
-    // buffer stuffer
-    b_samples = buffer_locksamples(dbuf);
-    for(i = 0; i < b_frames; i++){
-        b_samples[i] = x->warpfunc[i];
+
+    float *b_samples = buffer_locksamples(dbuf);
+    if (b_samples) {
+        for (long i = 0; i < b_frames; i++) {
+            b_samples[i] = warpfunc[i];
+        }
+        buffer_unlocksamples(dbuf);
+        object_method((t_object *)dbuf, gensym("dirty"));
     }
-    buffer_unlocksamples(dbuf);
-    sysmem_freeptr( (void *) x->warpfunc );
-    object_method(dbuf, gensym("dirty"));
+
+    sysmem_freeptr(warpfunc);
+    object_free(tablebuf_ref);
 }
 
-void buffi_autospike(t_buffi *x, t_symbol *msg, short argc, t_atom *argv)
+void buffi_autocurvefunc(t_buffi *x, t_symbol *msg, long argc, t_atom *argv)
 {
-    int i;
-    t_buffer_ref *tablebuf_ref;
-    t_buffer_obj *dbuf;
-    long b_nchans;
-    long b_frames;
-    float *b_samples;
-    double minval, maxval, odds;
-    t_symbol *buffername;
-    
-    /////
-    
-    minval = atom_getfloatarg(0,argc,argv);
-    maxval = atom_getfloatarg(1,argc,argv);
-    odds = 1.0 - atom_getfloatarg(2,argc,argv);
-    buffername = atom_getsymarg(3,argc,argv);
-    tablebuf_ref = buffer_ref_new((t_object*)x, buffername);
-    
-    dbuf = buffer_ref_getobject(tablebuf_ref);
-    if(dbuf == NULL){
-        object_post((t_object*)x,"%s: nonexistent buffer ( %s )",
-                    OBJECT_NAME, buffername->s_name);
+    if (argc < 4) {
+        object_error((t_object *)x, "%s: autocurvefunc requires minval, maxval, slope, buffername", OBJECT_NAME);
         return;
     }
-    b_nchans = buffer_getchannelcount(dbuf);
-    b_frames = buffer_getframecount(dbuf);
-    if(b_nchans != 1){
-        post("%s: table must be mono",OBJECT_NAME);
+
+    double minval = atom_getfloat(argv);
+    double maxval = atom_getfloat(argv + 1);
+    double slope  = 1.0 - atom_getfloat(argv + 2);
+    t_symbol *buffername = atom_getsym(argv + 3);
+
+    t_buffer_ref *tablebuf_ref = buffer_ref_new((t_object *)x, buffername);
+    if (!tablebuf_ref) return;
+
+    t_buffer_obj *dbuf = buffer_ref_getobject(tablebuf_ref);
+    if (!dbuf) {
+        object_error((t_object *)x, "%s: nonexistent buffer (%s)", OBJECT_NAME, buffername->s_name);
+        object_free(tablebuf_ref);
         return;
     }
-    x->warpfunc = (float *)sysmem_newptr(b_frames * sizeof(float));
-    for(i = 0; i< b_frames; i++){
-        if( buffi_randf(0.0,1.0) > odds ){
-            x->warpfunc[i] = buffi_randf(minval, maxval);
+
+    long b_nchans = buffer_getchannelcount(dbuf);
+    long b_frames = buffer_getframecount(dbuf);
+    if (b_nchans != 1 || b_frames < 10) {
+        object_error((t_object *)x, "%s: buffer must be mono and have at least 10 frames", OBJECT_NAME);
+        object_free(tablebuf_ref);
+        return;
+    }
+
+    float *warpfunc = (float *)sysmem_newptr(b_frames * sizeof(float));
+    if (!warpfunc) {
+        object_free(tablebuf_ref);
+        return;
+    }
+
+    long minpoints = (long)(0.01 * (double)b_frames);
+    long maxpoints = (long)(0.10 * (double)b_frames);
+    if (minpoints < 1) minpoints = 1;
+    if (maxpoints <= minpoints) maxpoints = minpoints + 1;
+
+    double lastval = buffi_randf(minval, maxval);
+    long pointcount = 0;
+
+    while (pointcount < b_frames) {
+        double target = buffi_randf(minval, maxval);
+        long range = maxpoints - minpoints;
+        long segpoints = minpoints + (range > 0 ? (rand() % range) : 0);
+
+        if (pointcount + segpoints > b_frames) {
+            segpoints = b_frames - pointcount;
+        }
+
+        for (long i = 0; i < segpoints; i++) {
+            double m2 = (double)i / (double)segpoints;
+            double m1 = 1.0 - m2;
+            double linval = m1 * lastval + m2 * target;
+            if (linval < 0.0) linval = 0.0;
+            warpfunc[pointcount + i] = (float)pow(linval, slope);
+        }
+        lastval = target;
+        pointcount += segpoints;
+    }
+
+    float *b_samples = buffer_locksamples(dbuf);
+    if (b_samples) {
+        for (long i = 0; i < b_frames; i++) {
+            b_samples[i] = warpfunc[i];
+        }
+        buffer_unlocksamples(dbuf);
+        object_method((t_object *)dbuf, gensym("dirty"));
+    }
+
+    sysmem_freeptr(warpfunc);
+    object_free(tablebuf_ref);
+}
+
+void buffi_autospike(t_buffi *x, t_symbol *msg, long argc, t_atom *argv)
+{
+    if (argc < 4) {
+        object_error((t_object *)x, "%s: autospike requires minval, maxval, odds, buffername", OBJECT_NAME);
+        return;
+    }
+
+    double minval = atom_getfloat(argv);
+    double maxval = atom_getfloat(argv + 1);
+    double odds   = 1.0 - atom_getfloat(argv + 2);
+    t_symbol *buffername = atom_getsym(argv + 3);
+
+    t_buffer_ref *tablebuf_ref = buffer_ref_new((t_object *)x, buffername);
+    if (!tablebuf_ref) return;
+
+    t_buffer_obj *dbuf = buffer_ref_getobject(tablebuf_ref);
+    if (!dbuf) {
+        object_error((t_object *)x, "%s: nonexistent buffer (%s)", OBJECT_NAME, buffername->s_name);
+        object_free(tablebuf_ref);
+        return;
+    }
+
+    long b_nchans = buffer_getchannelcount(dbuf);
+    long b_frames = buffer_getframecount(dbuf);
+    if (b_nchans != 1 || b_frames <= 0) {
+        object_error((t_object *)x, "%s: buffer must be mono and non-empty", OBJECT_NAME);
+        object_free(tablebuf_ref);
+        return;
+    }
+
+    float *warpfunc = (float *)sysmem_newptr(b_frames * sizeof(float));
+    if (!warpfunc) {
+        object_free(tablebuf_ref);
+        return;
+    }
+
+    for (long i = 0; i < b_frames; i++) {
+        if (buffi_randf(0.0, 1.0) > odds) {
+            warpfunc[i] = (float)buffi_randf(minval, maxval);
         } else {
-            x->warpfunc[i] = 0.0;
+            warpfunc[i] = 0.0f;
         }
     }
-    // buffer stuffer
-    b_samples = buffer_locksamples(dbuf);
-    for(i = 0; i < b_frames; i++){
-        b_samples[i] = x->warpfunc[i];
+
+    float *b_samples = buffer_locksamples(dbuf);
+    if (b_samples) {
+        for (long i = 0; i < b_frames; i++) {
+            b_samples[i] = warpfunc[i];
+        }
+        buffer_unlocksamples(dbuf);
+        object_method((t_object *)dbuf, gensym("dirty"));
     }
-    buffer_unlocksamples(dbuf);
-    sysmem_freeptr( (void *) x->warpfunc );
-    object_method(dbuf, gensym("dirty"));
+
+    sysmem_freeptr(warpfunc);
+    object_free(tablebuf_ref);
 }
 
 t_max_err buffi_notify(t_buffi *x, t_symbol *s, t_symbol *msg, void *sender, void *data)
 {
-    buffer_ref_notify(x->src1_buffer_ref, s, msg, sender, data);
-    buffer_ref_notify(x->src2_buffer_ref, s, msg, sender, data);
-    return buffer_ref_notify(x->dest_buffer_ref, s, msg, sender, data);
+    if (x->src1_buffer_ref) buffer_ref_notify(x->src1_buffer_ref, s, msg, sender, data);
+    if (x->src2_buffer_ref) buffer_ref_notify(x->src2_buffer_ref, s, msg, sender, data);
+    if (x->dest_buffer_ref) return buffer_ref_notify(x->dest_buffer_ref, s, msg, sender, data);
+    return MAX_ERR_NONE;
 }
-
-double buffi_randf( double min, double max ){
-    return min + (max - min) * ((double) rand() / (double)RAND_MAX);
-}
-
