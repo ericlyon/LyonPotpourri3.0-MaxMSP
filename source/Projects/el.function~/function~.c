@@ -1,357 +1,345 @@
+/**
+ * @file function~.c
+ * @brief Writes synthesized functions (additive waveforms, envelopes, windows) into a buffer~ for Max 8/9.
+ * Modernized for buffer_ref lifecycle safety, balanced buffer locking,
+ * and bounds-checked envelope generation.
+ */
+
 #include "MSPd.h"
+#include <math.h>
+#include <string.h>
 
-
-/* comment */
+#ifndef TWOPI
+#define TWOPI 6.283185307179586
+#endif
 
 static t_class *function_class;
 #define OBJECT_NAME "function~"
 
 typedef struct _function
 {
-    t_pxobject x_obj;
-    t_symbol *wavename; // name of waveform buffer
+    t_object x_obj;               // not a signal object: no inlets/outlets of its own, no dsp_setup
+    t_symbol *wavename;           // name of target buffer~
     t_buffer_ref *src_buffer_ref; // MSP reference to the buffer
-    t_buffer_ref *dest_buffer_ref; // MSP reference to source buffer
-    
-    long b_frames;
-    long b_nchans;
-    float *b_samples;
     short normalize;
 } t_function;
 
-void function_setbuf(t_function *x, t_symbol *wavename);
-void *function_new(t_symbol *msg, short argc, t_atom *argv);
-void function_dsp(t_function *x, t_signal **sp);
-void function_redraw(t_function *x);
-void function_clear(t_function *x);
-void function_addsyn(t_function *x, t_symbol *msg, short argc, t_atom *argv);
-void function_aenv(t_function *x, t_symbol *msg, short argc, t_atom *argv);
-void function_adenv(t_function *x, t_symbol *msg, short argc, t_atom *argv);
-void function_normalize(t_function *x, t_floatarg f);
-void function_adrenv(t_function *x, t_symbol *msg, short argc, t_atom *argv);
+void *function_new(t_symbol *msg, long argc, t_atom *argv);
+void function_free(t_function *x);
+void function_addsyn(t_function *x, t_symbol *msg, long argc, t_atom *argv);
+void function_aenv(t_function *x, t_symbol *msg, long argc, t_atom *argv);
+void function_adenv(t_function *x, t_symbol *msg, long argc, t_atom *argv);
+void function_adrenv(t_function *x, t_symbol *msg, long argc, t_atom *argv);
 void function_rcos(t_function *x);
-void function_gaussian(t_function *x);
-
-void buffet_update(t_function *x);
-int function_openbuf(t_function *x);
+void function_gaussian(t_function *x, t_symbol *msg, long argc, t_atom *argv);
+void function_normalize(t_function *x, double f);
 t_max_err function_notify(t_function *x, t_symbol *s, t_symbol *msg, void *sender, void *data);
 
+/* ---------------------------------------------------------------- helpers */
+
+/*
+ * Acquires the target buffer: validates the reference, channel count and frame count,
+ * and locks the samples. On success (returns 1) the caller MUST call function_release().
+ * On failure (returns 0) nothing is locked.
+ */
+static int function_acquire(t_function *x, t_buffer_obj **buf, float **samples, long *frames)
+{
+    long nchans;
+
+    *buf = NULL;
+    *samples = NULL;
+    *frames = 0;
+
+    if (!x->src_buffer_ref) {
+        object_error((t_object *)x, "no buffer~ name specified");
+        return 0;
+    }
+    *buf = buffer_ref_getobject(x->src_buffer_ref);
+    if (!*buf) {
+        object_error((t_object *)x, "no buffer~ named %s", x->wavename->s_name);
+        return 0;
+    }
+    *samples = buffer_locksamples(*buf);
+    if (!*samples) {
+        object_error((t_object *)x, "could not lock buffer~ %s", x->wavename->s_name);
+        return 0;
+    }
+    // query geometry only after the lock, so it cannot change underneath us
+    nchans = buffer_getchannelcount(*buf);
+    *frames = buffer_getframecount(*buf);
+    if (nchans != 1) {
+        object_error((t_object *)x, "buffer must have only 1 channel, this one has %ld", nchans);
+        buffer_unlocksamples(*buf);
+        return 0;
+    }
+    if (*frames < 2) {
+        object_error((t_object *)x, "buffer~ %s is empty or too short", x->wavename->s_name);
+        buffer_unlocksamples(*buf);
+        return 0;
+    }
+    return 1;
+}
+
+// Unlock first, then notify listeners (waveform~ etc.) that the contents changed.
+static void function_release(t_buffer_obj *buf, int modified)
+{
+    buffer_unlocksamples(buf);
+    if (modified)
+        object_method(buf, gensym("dirty"));
+}
+
+/* ------------------------------------------------------------------- main */
 
 int C74_EXPORT main(void)
 {
-	t_class *c;
-	c = class_new("el.function~", (method)function_new, (method)dsp_free, sizeof(t_function), 0,A_GIMME, 0);
-	
-    class_addmethod(c,(method)function_addsyn,"addsyn", A_GIMME, 0);
-    class_addmethod(c,(method)function_aenv,"aenv", A_GIMME, 0);
-    class_addmethod(c,(method)function_adenv,"adenv", A_GIMME, 0);
-    class_addmethod(c,(method)function_adrenv,"adrenv", A_GIMME, 0);
-    class_addmethod(c,(method)function_gaussian,"gaussian", A_GIMME, 0);
-    class_addmethod(c,(method)function_normalize,"normalize", A_FLOAT, 0);
-    class_addmethod(c,(method)function_rcos,"rcos", 0);
-    class_addmethod(c, (method)function_notify, "notify", A_CANT, 0);
-	class_dspinit(c);
-	class_register(CLASS_BOX, c);
-	function_class = c;
-	potpourri_announce(OBJECT_NAME);
-	return 0;
+    t_class *c;
+    c = class_new("el.function~", (method)function_new, (method)function_free,
+                  sizeof(t_function), 0L, A_GIMME, 0);
+
+    class_addmethod(c, (method)function_addsyn,   "addsyn",   A_GIMME, 0);
+    class_addmethod(c, (method)function_aenv,     "aenv",     A_GIMME, 0);
+    class_addmethod(c, (method)function_adenv,    "adenv",    A_GIMME, 0);
+    class_addmethod(c, (method)function_adrenv,   "adrenv",   A_GIMME, 0);
+    class_addmethod(c, (method)function_gaussian, "gaussian", A_GIMME, 0);
+    class_addmethod(c, (method)function_normalize,"normalize",A_FLOAT, 0);
+    class_addmethod(c, (method)function_rcos,     "rcos",     A_NOTHING, 0);
+    class_addmethod(c, (method)function_notify,   "notify",   A_CANT, 0);
+    class_register(CLASS_BOX, c);
+    function_class = c;
+    potpourri_announce(OBJECT_NAME);
+    return 0;
 }
 
-void *function_new(t_symbol *msg, short argc, t_atom *argv)
+/* -------------------------------------------------------------- lifecycle */
+
+void *function_new(t_symbol *msg, long argc, t_atom *argv)
 {
     t_function *x = (t_function *)object_alloc(function_class);
-    x->wavename = atom_getsymarg(0,argc,argv);
+    if (!x)
+        return NULL;
+
+    x->wavename = atom_getsymarg(0, argc, argv);
     x->normalize = 1;
+    x->src_buffer_ref = NULL;
+
+    if (x->wavename && x->wavename->s_name[0]) {
+        x->src_buffer_ref = buffer_ref_new((t_object *)x, x->wavename);
+    } else {
+        object_error((t_object *)x, "no buffer~ name given as an argument");
+    }
     return x;
+}
+
+void function_free(t_function *x)
+{
+    if (x->src_buffer_ref) {
+        object_free(x->src_buffer_ref);
+        x->src_buffer_ref = NULL;
+    }
 }
 
 t_max_err function_notify(t_function *x, t_symbol *s, t_symbol *msg, void *sender, void *data)
 {
+    if (!x->src_buffer_ref)
+        return MAX_ERR_NONE;
     return buffer_ref_notify(x->src_buffer_ref, s, msg, sender, data);
 }
 
-void function_addsyn(t_function *x, t_symbol *msg, short argc, t_atom *argv)
+void function_normalize(t_function *x, double f)
 {
-    int i,j;
-    t_buffer_obj *wavebuf_b = NULL;
+    x->normalize = (f != 0.0);
+}
+
+/* --------------------------------------------------------------- functions */
+
+void function_addsyn(t_function *x, t_symbol *msg, long argc, t_atom *argv)
+{
+    long i, j;
+    t_buffer_obj *buf;
     long b_frames;
     float *b_samples;
-    float amp;
-    float maxamp, rescale;
-    
-    if( function_openbuf(x) ){
-        wavebuf_b = buffer_ref_getobject(x->src_buffer_ref);
-        b_frames= buffer_getframecount(wavebuf_b);
-        b_samples = buffer_locksamples(wavebuf_b);
-    } else {
+    double amp, maxamp, rescale, w;
+
+    if (!function_acquire(x, &buf, &b_samples, &b_frames))
         return;
-    }
-    
-    amp = atom_getfloatarg(0,argc,argv);
-    for(i=0;i<b_frames;i++){
-        b_samples[i] = amp;
-    }
-    for(j=1;j<argc;j++){
-        amp = atom_getfloatarg(j,argc,argv);
-        if(amp){
-            for(i=0;i<b_frames;i++){
-                b_samples[i] += amp * sin(TWOPI * (float) j * (float)i/(float)b_frames);
-            }
+
+    amp = atom_getfloatarg(0, argc, argv);
+    for (i = 0; i < b_frames; i++)
+        b_samples[i] = (float)amp;
+
+    for (j = 1; j < argc; j++) {
+        amp = atom_getfloatarg(j, argc, argv);
+        if (amp != 0.0) {
+            w = TWOPI * (double)j / (double)b_frames;
+            for (i = 0; i < b_frames; i++)
+                b_samples[i] += (float)(amp * sin(w * (double)i));
         }
     }
-    if(x->normalize){
-        maxamp = 0;
-        for(i=0;i<b_frames;i++){
-            if(maxamp < fabs(b_samples[i]))
-                maxamp = fabs(b_samples[i]);
+    if (x->normalize) {
+        maxamp = 0.0;
+        for (i = 0; i < b_frames; i++) {
+            double a = fabs((double)b_samples[i]);
+            if (maxamp < a)
+                maxamp = a;
         }
-        if(!maxamp){
-            post("* zero maxamp!");
-            return;
-        }
-        rescale = 1.0 / maxamp;
-        for(i=0;i<b_frames;i++){
-            b_samples[i] *= rescale;
+        if (maxamp > 0.0) {
+            rescale = 1.0 / maxamp;
+            for (i = 0; i < b_frames; i++)
+                b_samples[i] = (float)(b_samples[i] * rescale);
+        } else {
+            object_post((t_object *)x, "* zero maxamp! not normalizing");
         }
     }
-	buffet_update(x);
-    buffer_unlocksamples(wavebuf_b);
+    function_release(buf, 1);
 }
 
 void function_rcos(t_function *x)
 {
-    int i;
-    t_buffer_obj *wavebuf_b = NULL;
+    long i;
+    t_buffer_obj *buf;
     long b_frames;
     float *b_samples;
-    
-    if( function_openbuf(x) ){
-        wavebuf_b = buffer_ref_getobject(x->src_buffer_ref);
-        b_frames= buffer_getframecount(wavebuf_b);
-        b_samples = buffer_locksamples(wavebuf_b);
-    } else {
+
+    if (!function_acquire(x, &buf, &b_samples, &b_frames))
         return;
-    }
-    for(i=0;i<b_frames;i++){
-        b_samples[i] = 0.5 - 0.5 * cos(TWOPI * (float)i/(float)b_frames);
-    }
-	buffet_update(x);
-    buffer_unlocksamples(wavebuf_b);
+
+    for (i = 0; i < b_frames; i++)
+        b_samples[i] = (float)(0.5 - 0.5 * cos(TWOPI * (double)i / (double)b_frames));
+
+    function_release(buf, 1);
 }
 
-
-void function_gaussian(t_function *x)
+void function_gaussian(t_function *x, t_symbol *msg, long argc, t_atom *argv)
 {
-    int i;
-    t_buffer_obj *wavebuf_b = NULL;
+    long i;
+    t_buffer_obj *buf;
     long b_frames;
     float *b_samples;
-    float arg, xarg,in;
-    
-    if( function_openbuf(x) ){
-        wavebuf_b = buffer_ref_getobject(x->src_buffer_ref);
-        b_frames= buffer_getframecount(wavebuf_b);
-        b_samples = buffer_locksamples(wavebuf_b);
-    } else {
+    double step, in;
+
+    if (!function_acquire(x, &buf, &b_samples, &b_frames))
         return;
-    }
-    arg = 12.0 / (float)b_frames;
-    xarg = 1.0;
+
+    step = 12.0 / (double)b_frames;
     in = -6.0;
-    
-    for(i=0;i<b_frames;i++){
-        b_samples[i] = xarg * pow(2.71828, -(in*in)/2.0);
-        in += arg;
+    for (i = 0; i < b_frames; i++) {
+        b_samples[i] = (float)exp(-(in * in) / 2.0);
+        in += step;
     }
-	buffet_update(x);
-    buffer_unlocksamples(wavebuf_b);
+    function_release(buf, 1);
 }
-/*
-void function_clear(t_function *x)
+
+void function_adrenv(t_function *x, t_symbol *msg, long argc, t_atom *argv)
 {
-    int i;
-    long b_frames = x->b_frames;
-    float *b_samples = x->b_samples;
-    
-    function_setbuf(x, x->wavename);
-    b_frames = x->b_frames;
-    b_samples = x->b_samples;
-    for(i=0;i<b_frames;i++)
-        b_samples[i] = 0.0;
-    function_redraw(x);
-}
-*/
-void function_adrenv(t_function *x, t_symbol *msg, short argc, t_atom *argv)
-{
-    int i;
-    t_buffer_obj *wavebuf_b = NULL;
+    long i, j;
+    t_buffer_obj *buf;
     long b_frames;
     float *b_samples;
-    
-    int al, dl, sl, rl;
-    int j;
-    float downgain = 0.33;
-    
-    if( function_openbuf(x) ){
-        wavebuf_b = buffer_ref_getobject(x->src_buffer_ref);
-        b_frames= buffer_getframecount(wavebuf_b);
-        b_samples = buffer_locksamples(wavebuf_b);
-    } else {
-        return;
-    }
-    al = (float) b_frames * atom_getfloatarg(0,argc,argv);
-    dl = (float) b_frames * atom_getfloatarg(1,argc,argv);
-    rl = (float) b_frames * atom_getfloatarg(2,argc,argv);
-    downgain = atom_getfloatarg(3,argc,argv);
-    if(downgain <= 0)
+    double fa, fd, fr, downgain;
+    long al, dl, sl, rl;
+
+    fa = atom_getfloatarg(0, argc, argv);
+    fd = atom_getfloatarg(1, argc, argv);
+    fr = atom_getfloatarg(2, argc, argv);
+    downgain = atom_getfloatarg(3, argc, argv);
+    if (!(downgain > 0.0))     // also catches NaN
         downgain = 0.333;
-    if(al+dl+rl >= b_frames){
-        post("atk and dk and release are too long");
+    if (!(fa >= 0.0 && fd >= 0.0 && fr >= 0.0)) {
+        object_error((t_object *)x, "attack, decay and release must be non-negative fractions");
         return;
     }
-    sl = b_frames - (al+dl+rl);
-    
-    for(i=0;i<al;i++){
-        b_samples[i] = (float)i/(float)al;
+
+    if (!function_acquire(x, &buf, &b_samples, &b_frames))
+        return;
+
+    al = (long)((double)b_frames * fa);
+    dl = (long)((double)b_frames * fd);
+    rl = (long)((double)b_frames * fr);
+    if (al + dl + rl >= b_frames) {
+        object_error((t_object *)x, "attack, decay and release are too long");
+        function_release(buf, 0);
+        return;
     }
-    for(i=al, j=dl;i<al+dl;i++,j--){
-        b_samples[i] = downgain + (1.-downgain)*(float)j/(float)dl;
-    }
-    for(i=al+dl;i<al+dl+sl;i++){
-        b_samples[i] = downgain;
-    }
-    for(i=al+dl+sl,j=rl;i<b_frames;i++,j--){
-        b_samples[i] = downgain * (float)j/(float)rl;
-    }
-	buffet_update(x);
-    buffer_unlocksamples(wavebuf_b);
+    sl = b_frames - (al + dl + rl);
+
+    for (i = 0; i < al; i++)
+        b_samples[i] = (float)((double)i / (double)al);
+    for (i = al, j = dl; i < al + dl; i++, j--)
+        b_samples[i] = (float)(downgain + (1.0 - downgain) * (double)j / (double)dl);
+    for (i = al + dl; i < al + dl + sl; i++)
+        b_samples[i] = (float)downgain;
+    for (i = al + dl + sl, j = rl; i < b_frames; i++, j--)
+        b_samples[i] = (float)(downgain * (double)j / (double)rl);
+
+    function_release(buf, 1);
 }
 
-void function_adenv(t_function *x, t_symbol *msg, short argc, t_atom *argv)
+void function_adenv(t_function *x, t_symbol *msg, long argc, t_atom *argv)
 {
-    int i;
-    t_buffer_obj *wavebuf_b = NULL;
+    long i, j;
+    t_buffer_obj *buf;
     long b_frames;
     float *b_samples;
-    int j;
-    int al, dl, rl;
-    float downgain = 0.33;
-    
-    if( function_openbuf(x) ){
-        wavebuf_b = buffer_ref_getobject(x->src_buffer_ref);
-        b_frames= buffer_getframecount(wavebuf_b);
-        b_samples = buffer_locksamples(wavebuf_b);
-    } else {
-        return;
-    }
-    al = (float) b_frames * atom_getfloatarg(0,argc,argv);
-    dl = (float) b_frames * atom_getfloatarg(1,argc,argv);
-    downgain = atom_getfloatarg(2,argc,argv);
-    if(downgain <= 0)
+    double fa, fd, downgain;
+    long al, dl, rl;
+
+    fa = atom_getfloatarg(0, argc, argv);
+    fd = atom_getfloatarg(1, argc, argv);
+    downgain = atom_getfloatarg(2, argc, argv);
+    if (!(downgain > 0.0))
         downgain = 0.333;
-    if(al+dl >= b_frames){
-        post("atk and dk are too long");
+    if (!(fa >= 0.0 && fd >= 0.0)) {
+        object_error((t_object *)x, "attack and decay must be non-negative fractions");
         return;
     }
-    rl = b_frames - (al+dl);
-    
-    for(i=0;i<al;i++){
-        b_samples[i] = (float)i/(float)al;
-    }
-    for(i=al, j=dl;i<al+dl;i++,j--){
-        b_samples[i] = downgain + (1.-downgain)*(float)j/(float)dl;
-    }
-    for(i=al+dl,j=rl;i<b_frames;i++,j--){
-        b_samples[i] = downgain * (float)j/(float)rl;
-    }
-	buffet_update(x);
-    buffer_unlocksamples(wavebuf_b);
-}
 
-void function_aenv(t_function *x, t_symbol *msg, short argc, t_atom *argv)
-{
-    int i;
-    t_buffer_obj *wavebuf_b = NULL;
-    long b_frames;
-    float *b_samples;
-    int j;
-    int al, dl;
-    float frac;
-    frac = atom_getfloatarg(0,argc,argv);
-    
-    if( function_openbuf(x) ){
-        wavebuf_b = buffer_ref_getobject(x->src_buffer_ref);
-        b_frames= buffer_getframecount(wavebuf_b);
-        b_samples = buffer_locksamples(wavebuf_b);
-    } else {
+    if (!function_acquire(x, &buf, &b_samples, &b_frames))
+        return;
+
+    al = (long)((double)b_frames * fa);
+    dl = (long)((double)b_frames * fd);
+    if (al + dl >= b_frames) {
+        object_error((t_object *)x, "attack and decay are too long");
+        function_release(buf, 0);
         return;
     }
-    if(frac <= 0 || frac >= 1){
-        post("* attack time must range from 0.0 - 1.0, rather than %f",frac);
-    }
-    
-    al = b_frames * frac;
-    
-    dl = b_frames - al;
-    for(i=0;i<al;i++){
-        b_samples[i] = (float)i/(float)al;
-    }
-    for(i=al, j=dl;i<b_frames;i++,j--){
-        b_samples[i] = (float)j/(float)dl;
-    }
-	buffet_update(x);
-    buffer_unlocksamples(wavebuf_b);
+    rl = b_frames - (al + dl);
+
+    for (i = 0; i < al; i++)
+        b_samples[i] = (float)((double)i / (double)al);
+    for (i = al, j = dl; i < al + dl; i++, j--)
+        b_samples[i] = (float)(downgain + (1.0 - downgain) * (double)j / (double)dl);
+    for (i = al + dl, j = rl; i < b_frames; i++, j--)
+        b_samples[i] = (float)(downgain * (double)j / (double)rl);
+
+    function_release(buf, 1);
 }
 
-void function_normalize(t_function *x, t_floatarg f)
+void function_aenv(t_function *x, t_symbol *msg, long argc, t_atom *argv)
 {
-    x->normalize = (short)f;
-}
-
-int function_openbuf(t_function *x)
-{
-    
-    t_buffer_obj *wavebuf_b;
-    long b_nchans;
+    long i, j;
+    t_buffer_obj *buf;
     long b_frames;
     float *b_samples;
-    
-    // Acquire Buffer
-    if(!x->src_buffer_ref){
-        x->src_buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
-    } else{
-        buffer_ref_set(x->src_buffer_ref, x->wavename);
-    }
-    wavebuf_b = buffer_ref_getobject(x->src_buffer_ref);
-    if(wavebuf_b == NULL){
-        // buffer_unlocksamples(wavebuf_b);
-        return 0; // bad buf
-    }
-    b_nchans = buffer_getchannelcount(wavebuf_b);
-    b_frames= buffer_getframecount(wavebuf_b);
-	b_samples = buffer_locksamples(wavebuf_b);
-    
-    if(! b_samples){
-        buffer_unlocksamples(wavebuf_b);
-        return 0; // bad buf
-    }
-    if( b_nchans != 1){
-        object_post((t_object *)x, "buffer must have only 1 channel, this one has %d", b_nchans);
-        buffer_unlocksamples(wavebuf_b);
-        return 0; // bad buf
-    }
-    buffer_unlocksamples(wavebuf_b);
-    return 1;  // good buffer acquired
-}
+    double frac;
+    long al, dl;
 
-void buffet_update(t_function *x)
-{
-    t_buffer_obj *the_buffer;
-    if(!x->src_buffer_ref){
-        x->src_buffer_ref = buffer_ref_new((t_object*)x, x->wavename);
-    } else{
-        buffer_ref_set(x->src_buffer_ref, x->wavename);
+    frac = atom_getfloatarg(0, argc, argv);
+    if (!(frac > 0.0 && frac < 1.0)) {
+        object_error((t_object *)x, "attack time must range from 0.0 - 1.0 (exclusive), rather than %f", frac);
+        return;
     }
-    the_buffer = buffer_ref_getobject(x->src_buffer_ref);
-    object_method( the_buffer, gensym("dirty") );
+
+    if (!function_acquire(x, &buf, &b_samples, &b_frames))
+        return;
+
+    al = (long)((double)b_frames * frac);
+    dl = b_frames - al;     // al < b_frames, so dl >= 1
+
+    for (i = 0; i < al; i++)
+        b_samples[i] = (float)((double)i / (double)al);
+    for (i = al, j = dl; i < b_frames; i++, j--)
+        b_samples[i] = (float)((double)j / (double)dl);
+
+    function_release(buf, 1);
 }
