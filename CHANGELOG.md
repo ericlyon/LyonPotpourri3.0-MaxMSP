@@ -147,4 +147,10 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Eliminated the redundant `inarr` heap buffer and enforced `Z_NO_INPLACE` signal isolation to read inputs in-register.
 * Unified output accumulation and vectorized channel clearing with `memset`, resolving downmixing calculation hazards.
 
+### `el.sigseq~`
+* Added missing `class_dspinit` call during class registration, resolving the error where inlets failed to bind incoming audio signals.
+* Guarded attack, decay, and release envelope stages against division-by-zero, preventing `NaN` sample corruption on zero-duration settings.
+* Eradicated the fixed-size `trigger_vec` buffer to prevent heap overruns on signal vector sizes exceeding 2048.
+* Registered `sigseq_free` to deallocate the sequence buffer and properly dispose of the clock object.
+
 
