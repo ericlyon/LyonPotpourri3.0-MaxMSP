@@ -120,3 +120,8 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Guarded against zero-channel initialization to prevent `SIGFPE` divide-by-zero crashes during panning offset modulo calculations.
 * Replaced discontinuous threshold snapping on the pan controller with continuous modular `fmod` wrapping, eliminating audio clicks during modulation sweeps.
 * Eradicated the redundant heap-allocated `inarr` buffer and registered `rotapan_free` for zero-leak teardown.
+
+### `el.rtrig~`
+* Replaced global `rand()`/`srand()` calls with a thread-safe, instance-local 32-bit XorShift PRNG, eliminating cross-thread contention and fixing complete trigger failure on Windows.
+* Connected `mute` state inspection inside `rtrig_perform64` to enforce true output silence when enabled.
+* Modernized runtime initialization to `ext_main`, standardizing all control messages to 64-bit double precision.
