@@ -131,3 +131,9 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Removed redundant `trigger_vec` and dead `beats` arrays, eliminating `realloc()` allocations during `dsp64` graph compilation.
 * Registered `samm_free` in `class_new` and added active `mute` state inspection to guarantee output silence.
 
+### `el.sarec~`
+* Prevented audio-thread `SIGSEGV` crashes by validating sample pointers from `buffer_locksamples` and clamping active channels to buffer boundaries.
+* Hoisted `buffer_ref_set` and console logging out of `perform64`, eliminating audio-thread lock contention and priority inversion.
+* Enforced positive lower bounds on punch-mode crossfading to prevent division-by-zero `NaN` sample corruption.
+* Registered `sarec_free` in `class_new` to deallocate the `armed_chans` array and release `recbuf`.
+

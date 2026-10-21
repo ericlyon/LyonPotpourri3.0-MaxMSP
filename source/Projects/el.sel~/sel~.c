@@ -1,122 +1,153 @@
+/**
+ * @file sel~.c
+ * @brief Sample-accurate signal value selector and click router for Max 8/9.
+ * Modernized for 64-bit dsp64, zero-value match capability, and SIMD outlet clearing.
+ */
+
 #include "MSPd.h"
+#include <string.h>
+#include <stdio.h>
 
-static t_class *sel_class;
+#define OBJECT_NAME "el.sel~"
+#define MAX_SELECTORS (256)
 
-#define MAXBEATS (256)
-#define OBJECT_NAME "sel~"
-#define COMPILE_DATE "9.02.07"
-#define OBJECT_VERSION "2.01"
-// #define DATE "prerelease"
+static t_class *sel_class = NULL;
 
 typedef struct _sel
 {
-	t_pxobject x_obj;
-	t_double *matches; // store numbers to match against
-//	float *trigger_vec; // copy of input vector
-	t_double length; // number of matches to check
+    t_pxobject  x_obj;
+    double     *matches; // Array of numeric targets to match against
+    long        length;  // Number of match targets / signal outlets
 } t_sel;
 
+// Prototypes
 void *sel_new(t_symbol *msg, short argc, t_atom *argv);
-void *sel_beatlist(t_sel *x, t_symbol *msg, short argc, t_atom *argv);
-void sel_assist(t_sel *x, void *b, long m, long a, char *s);
-void sel_free(t_sel *x);
-void sel_mute(t_sel *x, t_floatarg f);
-void sel_perform64(t_sel *x, t_object *dsp64, double **ins, 
-                   long numins, double **outs,long numouts, long n,
-                   long flags, void *userparam);
-void sel_dsp64(t_sel *x, t_object *dsp64, short *count, double sr, long n, long flags);
+void  sel_free(t_sel *x);
+void  sel_assist(t_sel *x, void *b, long msg, long arg, char *dst);
+void  sel_dsp64(t_sel *x, t_object *dsp64, short *count, double sr, long n, long flags);
+void  sel_perform64(t_sel *x, t_object *dsp64, double **ins, 
+                    long numins, double **outs, long numouts, long n,
+                    long flags, void *userparam);
 
-int C74_EXPORT main(void)
+// -------------------------------------------------------------------------
+// Initialization & Lifecycle
+// -------------------------------------------------------------------------
+
+void C74_EXPORT ext_main(void *r)
 {
-	t_class *c;
-	c = class_new("el.sel~", (method)sel_new, (method)sel_free, sizeof(t_sel), 0,A_GIMME, 0);
-	class_addmethod(c,(method)sel_assist,"assist",A_CANT,0);
-    class_addmethod(c,(method)sel_dsp64,"dsp64",A_CANT,0);
-	potpourri_announce(OBJECT_NAME);
-	class_dspinit(c);
-	class_register(CLASS_BOX, c);
-	sel_class = c;	return 0;
-}
+    t_class *c = class_new("el.sel~", 
+                           (method)sel_new, 
+                           (method)sel_free, 
+                           sizeof(t_sel), 
+                           0L, 
+                           A_GIMME, 
+                           0);
 
+    class_addmethod(c, (method)sel_dsp64,  "dsp64",  A_CANT, 0);
+    class_addmethod(c, (method)sel_assist, "assist", A_CANT, 0);
 
-void sel_assist (t_sel *x, void *b, long msg, long arg, char *dst)
-{
-	if (msg==ASSIST_INLET) {
-		switch (arg) {
-			case 0: sprintf(dst,"(signal) Test Value"); break;
-		}
-	} 
-	else if (msg==ASSIST_OUTLET) {
-		// run through each outlet algorithmically
-		sprintf(dst,"(signal) Click if Matches %f",x->matches[arg]);
-	}
+    class_dspinit(c);
+    class_register(CLASS_BOX, c);
+    sel_class = c;
+
+    potpourri_announce(OBJECT_NAME);
 }
 
 void *sel_new(t_symbol *msg, short argc, t_atom *argv)
 {
-	int i;
+    if (argc < 1 || !argv) {
+        object_error(NULL, "%s: requires at least one match target value", OBJECT_NAME);
+        return NULL;
+    }
 
-	t_sel *x = (t_sel *)object_alloc(sel_class);
-	
-	x->length = argc;
-	dsp_setup((t_pxobject *)x,1);
-	
-	for(i=0;i< x->length ;i++)
-		outlet_new((t_pxobject *)x, "signal");  
-	x->x_obj.z_misc |= Z_NO_INPLACE;
+    if (argc > MAX_SELECTORS) {
+        object_error(NULL, "%s: exceeded maximum of %d match targets", OBJECT_NAME, MAX_SELECTORS);
+        return NULL;
+    }
 
+    t_sel *x = (t_sel *)object_alloc(sel_class);
+    if (!x) return NULL;
 
-	x->matches = (t_double *) sysmem_newptr(x->length * sizeof(double));
-	
-	for(i = 0; i < argc; i++){
-		x->matches[i] = (double)atom_getfloatarg(i,argc,argv);
-	}
+    x->length = argc;
 
-	return x;
+    // Inlet 0 = Input signal to evaluate
+    dsp_setup((t_pxobject *)x, 1);
+    x->x_obj.z_misc |= Z_NO_INPLACE;
+
+    for (long i = 0; i < x->length; i++) {
+        outlet_new((t_pxobject *)x, "signal");
+    }
+
+    x->matches = (double *)sysmem_newptr((size_t)x->length * sizeof(double));
+    if (!x->matches) {
+        object_free(x);
+        return NULL;
+    }
+
+    for (long i = 0; i < argc; i++) {
+        x->matches[i] = atom_getfloatarg(i, argc, argv);
+    }
+
+    return x;
 }
 
 void sel_free(t_sel *x)
 {
-	dsp_free((t_pxobject *) x);
-	sysmem_freeptr(x->matches);	
+    dsp_free((t_pxobject *)x);
+    if (x->matches) {
+        sysmem_freeptr(x->matches);
+        x->matches = NULL;
+    }
 }
 
-void sel_perform64(t_sel *x, t_object *dsp64, double **ins, 
-                    long numins, double **outs,long numouts, long n,
-                    long flags, void *userparam)
+// -------------------------------------------------------------------------
+// Assist Tooltips
+// -------------------------------------------------------------------------
+
+void sel_assist(t_sel *x, void *b, long msg, long arg, char *dst)
 {
-    int i, j;
-	t_double *inlet = ins[0];
-	t_double *match_outlet;
-	t_double *matches = x->matches;
-	int length = x->length;
-	
-    // clean each outlet
-	for(j = 0; j < length; j++){
-		match_outlet = (t_double *) outs[j];
-		for(i = 0; i < n; i++){
-			match_outlet[i] = 0.0;
-		}
-	}
-    // now match and route any clicks in the input
-	for(i = 0; i < n; i++){
-		if(inlet[i]){
-			for(j = 0; j < length; j++){
-				if( inlet[i] == matches[j]){
-					match_outlet = outs[j];
-					match_outlet[i] = 1.0; // always send a unity click
-				}
-			}
-		}
-	}
+    if (msg == ASSIST_INLET) {
+        if (arg == 0) {
+            snprintf(dst, 256, "(signal) Value to Match");
+        }
+    } else if (msg == ASSIST_OUTLET) {
+        if (arg < x->length) {
+            snprintf(dst, 256, "(signal) Click if Matches %g", x->matches[arg]);
+        }
+    }
 }
 
-
-
+// -------------------------------------------------------------------------
+// Real-Time DSP Perform Routine
+// -------------------------------------------------------------------------
 
 void sel_dsp64(t_sel *x, t_object *dsp64, short *count, double sr, long n, long flags)
 {
-    if(!sr)
-        return;
-    object_method(dsp64, gensym("dsp_add64"),x,sel_perform64,0,NULL);
+    if (sr <= 0.0) return;
+    object_method(dsp64, gensym("dsp_add64"), x, sel_perform64, 0, NULL);
+}
+
+void sel_perform64(t_sel *x, t_object *dsp64, double **ins, 
+                    long numins, double **outs, long numouts, long n,
+                    long flags, void *userparam)
+{
+    long length = x->length;
+
+    // Vectorized zeroing of all match outlets
+    for (long j = 0; j < length; j++) {
+        memset(outs[j], 0, (size_t)n * sizeof(double));
+    }
+
+    const double *inlet   = ins[0];
+    const double *matches = x->matches;
+
+    // Sample-accurate match testing (allows 0.0 matches)
+    for (long i = 0; i < n; i++) {
+        double val = inlet[i];
+        for (long j = 0; j < length; j++) {
+            if (val == matches[j]) {
+                outs[j][i] = 1.0;
+            }
+        }
+    }
 }
