@@ -1,60 +1,117 @@
-# LyonPotpourri 3.0 — Max 8/9 Maintenance & Stability Release
+# LyonPotpourri 3.0 — Modernization Changelog
 
-This release brings modern macOS toolchain support, critical stability fixes, multi-threading safety, and memory leak resolutions to key externals in the **LyonPotpourri 3.0** collection for Cycling '74 Max 8 and Max 9.
-
----
-
-## 🚀 Highlights
-
-* **Modern Apple Silicon & macOS Support:** Upgraded build targets to **macOS 12.0+ Universal 2 (`arm64` and `x86_64`)**, ensuring native compatibility with modern Xcode toolchains.
-* **Zero-Leak Teardowns:** Resolved persistent memory leaks where custom object destructors were bypassed in `class_new()`.
-* **Audio-Thread Hardening:** Eliminated UI and console calls from high-priority audio perform loops (`perform64`), preventing thread priority inversions and audio stutters.
-* **Buffer Safety & Memory Integrity:** Plugged buffer sample lock leaks and resolved boundary overruns across soundfile and wavetable operations.
+The following externals from the LyonPotpourri package have been updated to support the Cycling '74 Max 8/9 SDK. This release focuses on stability, 64-bit performance, memory safety, and thread-boundary compliance.
 
 ---
 
-## 📦 Object-by-Object Changes
+### `el.adsr~`
+* Fixed a fatal crash in `perform64` where the audio thread would enter an infinite loop and corrupt heap memory if the object was muted.
+* Resolved division-by-zero errors occurring with 0ms stage times by implementing reciprocal multiplication.
+* Corrected off-by-one errors in assist string inlet definitions.
+* Optimized DSP performance by pre-calculating segment sample multipliers.
 
-### `el.click2float~`
-* **Thread-Safe Event Emission:** Replaced the legacy scheduler `clock` with a deferred **`t_qelem`**. Clicks are now output safely on the Main (UI) thread, preventing race conditions and crashes when connected directly to UI objects.
-* **Destructor Teardown:** Implemented a dedicated `click2float_free()` destructor to decouple from the DSP chain and cancel/free pending `qelem` handles upon patch deletion.
-* **DSP Optimization:** Guarded `dsp64` routine with `count[0]` to bypass execution when the signal inlet is unconnected.
+### `el.bashfest~`
+* Eliminated fatal out-of-bounds array access in `bashfest_deploy_dsp` when grabbing buffer data.
+* Fixed buffer locking race conditions by ensuring symmetric unlocking across all error branches.
+* Optimized DSP performance by replacing real-time string lookups (`buffer_ref_set`) in the perform loop with direct object pointer access.
+* Implemented anti-denormal flushing macros (`FLUSH_DENORM`) on all recursive feedback taps to prevent CPU spikes.
+* Corrected multiple integer truncation and indexing bugs within the DSP effect chain.
 
 ### `el.buffet~`
-* **Buffer Lock Leak Fixes:** Symmetrically paired `buffer_locksamples()` with `buffer_unlocksamples()` across all error and early-return paths in `events`, `pevents`, `specswap`, `retroblock`, `copy_to_buffer`, and `erase`.
-* **64-bit DSP Sync Inlet:** Configured signal inlet 0 via `dsp_setup()` to safely read groove sync signals without dereferencing non-existent signal outlets.
-* **Memory Shift Safety:** Replaced undefined self-referential `sysmem_copyptr` calls with standard ISO C `memmove()` inside `buffet_rotatetozero`.
-* **Mono Copy Validation:** Fixed a pointer validation typo in `copy_to_mono_buffer` where source samples were checked twice while destination samples were left unchecked.
-* **Trimzero Logic:** Refined `trimzero` edge-case handling to safely detect leading/trailing silence and consistently fire the completion bang on both active operations and no-ops.
-* **Message Boundary Checks:** Added strict `argc` validation across all `A_GIMME` methods to prevent invalid memory reads on empty or truncated messages.
+* Fixed critical buffer-locking leaks where early returns left samples locked, causing system-wide audio deadlocks.
+* Implemented bounds checking for `A_GIMME` messages to prevent garbage heap reads.
+* Fixed an undefined behavior bug in `buffet_rotatetozero` where `sysmem_copyptr` was used for overlapping memory shifts; updated to `memmove`.
+* Fixed a double-locking typo in `buffet_copy_to_mono_buffer` that previously caused NULL pointer dereferences.
+
+### `el.buffi~`
+* Fixed fatal in-place signal buffer aliasing by adding `Z_NO_INPLACE`, preventing the input signal vector from being zeroed before the interpolation phase was read.
+* Standardized 64-bit memory management and corrected destructor logic to release all temporary function buffers on object deletion.
+* Removed audio-thread heap allocations.
+
+### `el.channel~`
+* Resolved out-of-bounds heap reads by strictly bounding channel index lookups to the current vector size (`vectorsize`) rather than an arbitrary max.
+* Added mandatory output zeroing when the gate is inactive or indices are out of range to prevent passing dirty uninitialized memory downstream.
+
+### `el.click2float~`
+* Resolved a fatal crash on object deletion by implementing a proper destructor (`click2float_free`) to cancel pending scheduler clocks before memory is released.
+* Migrated from scheduler `clock` to `t_qelem` for thread-safe float emission, ensuring compatibility with Overdrive and preventing UI thread race conditions.
+* Optimized DSP graph efficiency by bypassing perform routines for disconnected inlets.
+
+### `el.convolver~`
+* Fixed multi-megabyte heap leaks in the destructor by recursively deallocating impulse and source buffers.
+* Resolved a critical crash in `convolver_static_memory` where allocated buffers were assigned to local pointers instead of object struct fields.
+* Corrected lock-leak logic in `convolvechans` to guarantee buffer unlocking on all early-return paths.
+
+### `el.counter~`
+* Fixed the uninitialized state bug where the first trigger produced a zero-value output instead of the minimum count.
+* Added `Z_NO_INPLACE` to prevent audio vector aliasing.
+* Enforced input bounds checking to prevent undefined behavior on rapid parameter changes.
+
+### `el.clean_gate~`
+* Resolved a fatal crash caused by missing `return` statements in the mute branch, which previously allowed execution to fall through into invalid memory loops.
+* Fixed division-by-zero potential in crossfade calculations when using 0ms fade times.
+* Corrected broken logic where the `linear` flag was ignored in the perform loop.
+
+### `el.clean_selector~`
+* Prevented stack and heap overruns by bounding signal-connection lookups to the object's actual inlet count.
+* Fixed a severe memory leak in `dsp_free` by correctly registering the destructor and releasing the `connected_list` array.
+* Resolved `last_chan` dereference crashes when signal inputs were invalid or disconnected.
+
+### `el.expflam~`
+* Fixed memory corruption in `perform64` caused by using `sizeof(float)` instead of `sizeof(t_double)` in `memcpy` operations.
+* Corrected heap memory leaks by implementing `expflam_free` and removing legacy C standard library `malloc`/`calloc` calls.
+* Guarded against negative frame-count allocations in `memset` calls during flam pattern generation.
 
 ### `el.granule~`
-* **Destructor Leak Fix:** Registered `granule_dsp_free` in `class_new()` to properly free grain structures, pitch grids, and `buffer_ref` instances upon deletion.
-* **Window Buffer Validation:** Fixed a copy-paste bug in `granule_setbuf()` where the window buffer was improperly validated against the wavetable pointer, preventing null-dereference crashes on invalid buffer names.
-* **Zero-Frame / Empty Buffer Protection:** Added bounds checks to eliminate infinite phase-wrapping loops and null pointer crashes when empty buffers are loaded.
-* **Dynamic Buffer Tracking:** Added `granule_notify()` to ensure reloaded, resized, or swapped buffers update dynamically without stale pointer crashes.
-* **Mute Handling:** Formally exposed the `mute` message in `main()` and wired it into `perform64` to bypass audio processing with 0% CPU consumption when inactive.
+* Resolved memory leaks by correctly registering `granule_dsp_free` and releasing grain arrays/pitch grids on destruction.
+* Fixed a critical buffer-bound crash in `granule_perform64` caused by unvalidated null pointer access to waveform wavetables.
+* Prevented CPU-locking infinite loops when empty buffers were provided as inputs.
 
 ### `el.granulesf~`
-* **Destructor Registration:** Registered `granulesf_dsp_free` in `class_new()`, eliminating leaks of grain allocations, pitch scales, and buffer references on object destruction.
-* **Guarded Cleanup:** Resolved a critical null-pointer crash in `perform64` by ensuring `buffer_unlocksamples()` is never called on null buffer handles.
-* **Stereo Boundary Overrun Fix:** Corrected tail-boundary checks on stereo buffers (`(b_frames - 1) * 2`), preventing reads past the end of the heap allocation during final-sample frame interpolation.
-* **Audio-Thread Optimization:** Removed dynamic `buffer_ref_set()` symbol lookups from `perform64` and eliminated audio-thread `error()` console logging inside the sample loop.
-* **Retro Odds Bug Fix:** Fixed a logic bug where `retro_odds` was hardcoded to 0.0, restoring user-controlled reverse grain playback.
-* **Dynamic Notification & Muting:** Added `granulesf_notify()` and implemented `mute` handling in the audio loop.
+* Added support for both mono and stereo wavetables.
+* Fixed memory corruption caused by invalid stereo frame boundary lookups.
+* Removed high-priority audio thread console logging (`error()`) to prevent priority inversion.
+* Implemented `notify` callbacks to correctly handle external buffer changes/resizes.
 
----
+### `el.killdc~`
+* Resolved dead code issues and removed unimplemented prototypes.
+* Integrated anti-denormal protection inside the filter recursion loop to prevent performance spikes during quiet signal passages.
 
-## 🛠 Build System Updates
+### `el.latch~`
+* Fixed the sample-and-hold trigger bug where the object failed to update from Inlet 1 due to improper proxy management.
+* Added missing cleanup for internal state and enforced signal inlet isolation.
 
-* **CMake Deployment Target:** Updated root and target `MACOSX_DEPLOYMENT_TARGET` properties from obsolete `10.11`/`10.12` to `12.0` to resolve build errors on modern Apple Clang / Xcode toolchains.
-* **Clean Universal Builds:** Configured standard target properties across all `.mxo` bundles for universal deployment across Intel (`x86_64`) and Apple Silicon (`arm64`).
+### `el.magfreq_analysis~`
+* Eliminated massive memory leaks by registering the destructor and properly deallocating all 15 spectral analysis workbuffers.
+* Fixed an out-of-bounds heap access in `perform64` when the signal vector size exceeded the FFT bin count.
+* Re-enabled FFT size limiting to prevent buffer overruns during complex spectral analysis.
 
----
+### `el.markov~`
+* Fixed a fatal constructor bug where incorrect parsing of `A_GIMME` arguments forced custom pattern lengths to a default of 16.
+* Resolved a heap corruption vulnerability in `markov_new` where dynamic row allocation failed to scale with `event_count`.
+* Patched an out-of-bounds write in `perform64` occurring when the `manual_override` logic failed to terminate execution, causing an underflow loop.
 
-## 📋 Compatibility
+### `el.multigrain~`
+* Resolved memory leaks by implementing full recursive deallocation of dynamic grain, pitchscale, and buffer objects.
+* Added new `maxskip` and `minskip` attributes for user-definable range control.
+* Enabled support for stereo soundfile buffers.
+* Added `mixmode` attribute to control mono/stereo routing behavior.
 
-* **Host Environment:** Cycling '74 Max 8.x / Max 9.x
-* **Operating Systems:**
-  * macOS 12.0 (Monterey) through current macOS releases (Intel & Apple Silicon native)
-  * Windows 10 / 11 (64-bit)
+### `el.npan~`
+* Fixed the panner wrap-around bug where an input of `1.0` abruptly snapped to speaker 0 instead of the final channel.
+* Guarded out-of-bounds pointer accesses when performing multi-channel signal routing.
+
+### `el.oscil~`
+* Fixed destructor leaks by ensuring `old_wavetable` and `wavetable64` are properly released.
+* Fixed a state-reset bug in `dsp64` where the oscillator phase was forced to `0.0` on every graph recompilation, causing audible clicks.
+* Standardized all wavetable data to 64-bit `t_double` to prevent precision loss.
+
+### `el.phasemod~`
+* Resolved a crash in the `manual_override` branch caused by a missing `return`, which triggered heap memory corruption.
+* Added safety guards to prevent division-by-zero and log/exp domain collapse during phase modulation calculations.
+* Properly registered destructor for memory cleanup.
+
+### `el.quadpanin~`
+* Fixed an asymmetric coordinate clamping bug where `xval > 1.0` was omitted while `yval` was checked redundantly, preventing panning distortion on out-of-bounds inputs.
+* Corrected `Z_NO_INPLACE` assignment to use bitwise OR, preserving default DSP setup flags.
+* Modernized runtime initialization to `ext_main` with 64-bit `dsp64` optimizations and registered a dedicated destructor for object teardown.
