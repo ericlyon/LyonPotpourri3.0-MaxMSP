@@ -169,4 +169,9 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Corrected teardown leaks by making deallocation unconditional and properly disposing of `phase_clock` and mutex locks.
 * Added input sanitization against `NaN`/$\pm\infty$ on table and bin offset inlets, and enforced $[0, N2 - 1]$ bounds checks on `setstate` lists.
 
+### `el.squash~`
+* Guarded `squash_squat` against division-by-zero and `log10(0)` domain errors, eliminating `NaN` sample explosions on digital silence.
+* Implemented dynamic buffer reallocation and window regeneration in `dsp64` when the signal vector size changes.
+* Registered `squash_dsp_free` in `class_new` to deallocate all analysis, synthesis, and overlap-add buffers on object destruction.
+
 
