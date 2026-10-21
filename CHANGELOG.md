@@ -115,3 +115,8 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Fixed an asymmetric coordinate clamping bug where `xval > 1.0` was omitted while `yval` was checked redundantly, preventing panning distortion on out-of-bounds inputs.
 * Corrected `Z_NO_INPLACE` assignment to use bitwise OR, preserving default DSP setup flags.
 * Modernized runtime initialization to `ext_main` with 64-bit `dsp64` optimizations and registered a dedicated destructor for object teardown.
+
+### `el.rotapan~`
+* Guarded against zero-channel initialization to prevent `SIGFPE` divide-by-zero crashes during panning offset modulo calculations.
+* Replaced discontinuous threshold snapping on the pan controller with continuous modular `fmod` wrapping, eliminating audio clicks during modulation sweeps.
+* Eradicated the redundant heap-allocated `inarr` buffer and registered `rotapan_free` for zero-leak teardown.
