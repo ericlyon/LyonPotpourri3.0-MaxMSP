@@ -137,3 +137,8 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Enforced positive lower bounds on punch-mode crossfading to prevent division-by-zero `NaN` sample corruption.
 * Registered `sarec_free` in `class_new` to deallocate the `armed_chans` array and release `recbuf`.
 
+### `el.sel~`
+* Fixed a logic flaw where input values equal to `0.0` were bypassed, restoring match functionality for zero-indexed counters.
+* Added constructor bounds validation to prevent empty instantiation crashes and out-of-bounds assist tooltip dereferencing.
+* Modernized runtime initialization to `ext_main`, standardizing `length` as an integer and vectorizing outlet clearing with `memset`.
+
