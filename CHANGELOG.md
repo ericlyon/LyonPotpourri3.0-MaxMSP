@@ -192,3 +192,9 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Replaced iterative while-loop LFO wrapping with $O(1)$ bitwise masking and branch-free modulo arithmetic.
 * Enforced `Z_NO_INPLACE` signal isolation and modernized runtime initialization to `ext_main`.
 
+### `el.vdp~`
+* Fixed a buffer clearing defect where `memset` used `sizeof(float)` on 64-bit double buffers, leaving half the delay line uninitialized.
+* Resolved a unit conversion mismatch in `vdp_float` that allowed delay times to exceed allocated buffer lengths and corrupt memory.
+* Added missing `buffer_unlocksamples` and `buffer_setdirty` calls in `vdp_copy_to_buffer` to eliminate destination buffer locking.
+* Registered `vdp_free` to deallocate the internal delay line and release destination buffer references on deletion.
+
