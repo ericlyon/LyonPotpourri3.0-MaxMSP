@@ -153,4 +153,20 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Eradicated the fixed-size `trigger_vec` buffer to prevent heap overruns on signal vector sizes exceeding 2048.
 * Registered `sigseq_free` to deallocate the sequence buffer and properly dispose of the clock object.
 
+### `el.splitbank~`
+* Fixed tail clearing in the equal and smaller-than-vector paths, which zeroed the channel index instead of the buffer tail and let stale samples pile up in every output.
+* Fixed an input copy in the smaller-than-vector path that read past the MSP input vector and overran `input_buffer`.
+* Made `scramble`, `recall`, and `setstate` ramp consistently instead of jumping, and guarded the zero-ramp case against `NaN` on the sync outlet.
+* Stored `ramptime` in seconds so it survives DSP restarts, and made the `overlap` message update the hop size.
+* Added `dsp_free` to `splitbank_free` and fixed leaks of the internal vectors and oscbank structs, so every deleted instance now releases all its memory. Stored slots are now sized for the real FFT, saving about 30 MB per instance.
+* Validated `setstate` bin numbers and sanitized `NaN`/inf on signal inlets, preventing out-of-bounds writes and runaway oscillator wrapping.
+* Moved DSP re-initialization under a mutex, with perform outputting silence rather than reading half-updated state.
+* Persisted `minfreq`/`maxfreq` across DSP restarts instead of resetting them to defaults.
+
+### `el.splitspec~`
+* Added thread-safe buffer exchange using `systhread_mutex_trylock` to eliminate audio-thread race conditions during bin scrambling and state recall.
+* Fixed an out-of-bounds heap write where `stored_slots` was improperly sized to the vector size rather than the preset slot maximum.
+* Corrected teardown leaks by making deallocation unconditional and properly disposing of `phase_clock` and mutex locks.
+* Added input sanitization against `NaN`/$\pm\infty$ on table and bin offset inlets, and enforced $[0, N2 - 1]$ bounds checks on `setstate` lists.
+
 
