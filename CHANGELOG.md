@@ -186,3 +186,9 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Registered `vdb_free` in `class_new` to deallocate the `connections` array, `phase_clock`, and buffer reference on deletion.
 * Added anti-denormal flushing to feedback accumulation and replaced linear subtraction loops with $O(1)$ modulo wrapping.
 
+### `el.vdel~`
+* Fixed a method binding error where `protect` was declared with `A_CANT`, preventing message toggling.
+* Standardized no-argument constructor default delay to 50 ms, resolving an unintentional ~19 MB memory allocation.
+* Replaced iterative while-loop LFO wrapping with $O(1)$ bitwise masking and branch-free modulo arithmetic.
+* Enforced `Z_NO_INPLACE` signal isolation and modernized runtime initialization to `ext_main`.
+
