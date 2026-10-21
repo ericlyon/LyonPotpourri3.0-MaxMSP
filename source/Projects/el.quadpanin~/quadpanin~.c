@@ -1,1 +1,163 @@
-#include "ext.h"#include "z_dsp.h"#include "MSPd.h"#include <stdio.h>/*  Front   *out1         *out3    *out2         *out4  Back  */#define OBJECT_NAME "quadpanin~"void *quadpanin_class;typedef struct _quadpanin{    t_pxobject x_obj;    //  t_double pi_over_two;    //  t_double twopi;} t_quadpanin;void *quadpanin_new(t_symbol *s, int argc, t_atom *argv);t_int *offset_perform(t_int *w);t_int *quadpanin_perform(t_int *w);void quadpanin_dsp(t_quadpanin *x, t_signal **sp, short *count);void quadpanin_assist(t_quadpanin *x, void *b, long m, long a, char *s);void quadpanin_showstate( t_quadpanin *x );// void quadpanin_bypass( t_quadpanin *x, long toggle );void quadpanin_dsp64(t_quadpanin *x, t_object *dsp64, short *count, double sr, long n, long flags);void quadpanin_perform64(t_quadpanin *x, t_object *dsp64, double **ins,                         long numins, double **outs,long numouts, long n,                         long flags, void *userparam);/****/int C74_EXPORT main(void){    t_class *c;	c = class_new("el.quadpanin~", (method)quadpanin_new, (method)dsp_free, sizeof(t_quadpanin), 0,A_GIMME, 0);    class_addmethod(c, (method)quadpanin_dsp64, "dsp64", A_CANT, 0);	class_addmethod(c, (method)quadpanin_assist,"assist",A_CANT,0);    class_dspinit(c);	class_register(CLASS_BOX, c);	quadpanin_class = c;	potpourri_announce(OBJECT_NAME);	return 0;}void quadpanin_assist (t_quadpanin *x, void *b, long msg, long arg, char *dst){    if (msg==1) {        switch (arg) {            case 0: sprintf(dst,"(signal) Input"); break;            case 1: sprintf(dst,"(signal) X Value"); break;            case 2: sprintf(dst,"(signal) Y Value"); break;                        }    } else if (msg==2) {        switch (arg) {            case 0: sprintf(dst,"(signal) Output 1"); break;            case 1: sprintf(dst,"(signal) Output 2"); break;            case 2: sprintf(dst,"(signal) Output 3"); break;            case 3: sprintf(dst,"(signal) Output 4"); break;        }    }}void *quadpanin_new(t_symbol *s, int argc, t_atom *argv){    t_quadpanin *x = (t_quadpanin *)object_alloc(quadpanin_class);        dsp_setup((t_pxobject *)x,3);    outlet_new((t_pxobject *)x, "signal");    outlet_new((t_pxobject *)x, "signal");    outlet_new((t_pxobject *)x, "signal");    outlet_new((t_pxobject *)x, "signal");        x->x_obj.z_misc = Z_NO_INPLACE;        return x;}void quadpanin_perform64(t_quadpanin *x, t_object *dsp64, double **ins,                         long numins, double **outs,long numouts, long n,                         long flags, void *userparam){        t_double gain1, gain2, gain3, gain4;    t_double xval, yval;    t_double xsquared, ysquared, ix, iy, ixsquared, iysquared;        t_double *in = ins[0];    t_double *Xin = ins[1];    t_double *Yin = ins[2];            t_double *out1 = outs[0];    t_double *out2 = outs[1];    t_double *out3 = outs[2];    t_double *out4 = outs[3];    while( n-- ){        xval = *Xin++;        yval = *Yin++;        if( xval < 0.0 )            xval = 0.0;        if( yval > 1.0 )            yval = 1.0;        if( yval < 0.0 )            yval = 0.0;        if( yval > 1.0 )            yval = 1.0;                xsquared = xval * xval;        ysquared = yval * yval;        ix = 1.0 - xval;        iy = 1.0 - yval;        ixsquared = ix * ix;        iysquared = iy * iy;                gain1 = sqrt( xsquared + ysquared );        if( gain1 > 1.0 )            gain1 = 1.0;        gain1 = 1.0 - gain1; /* Left Rear Gain */       	                gain2 = sqrt( ixsquared + ysquared );        if( gain2 > 1.0 )            gain2 = 1.0;        gain2 = 1.0 - gain2; /* Right Rear Gain */                gain3 = sqrt( xsquared + iysquared );        if( gain3 > 1.0 )            gain3 = 1.0;        gain3 = 1.0 - gain3; /* Left Front Gain */                        gain4 = sqrt( ixsquared + iysquared ) ;        if( gain4 > 1.0 )            gain4 = 1.0;        gain4 = 1.0 - gain4; /* Right Front Gain*/                *out1++ = *in * gain3;        *out2++ = *in * gain4;        *out3++ = *in * gain2;        *out4++ = *in++ * gain1; 	}}/*  void quadpanin_dsp(t_quadpanin *x, t_signal **sp, short *count) { dsp_add(quadpanin_perform, 9, x, sp[0]->s_vec, sp[1]->s_vec, sp[2]->s_vec, sp[3]->s_vec, sp[4]->s_vec, sp[5]->s_vec, sp[6]->s_vec,  sp[0]->s_n); } */void quadpanin_dsp64(t_quadpanin *x, t_object *dsp64, short *count, double sr, long n, long flags){    if(!sr)        return;    object_method(dsp64, gensym("dsp_add64"),x,quadpanin_perform64,0,NULL);}
+/**
+ * @file quadpanin~.c
+ * @brief 4-channel vector/distance panning external for Max 8/9.
+ * Modernized for 64-bit dsp64, input coordinate clamping, and zero-leak heap teardown.
+ */
+
+#include "ext.h"
+#include "ext_obex.h"
+#include "z_dsp.h"
+#include "MSPd.h"
+#include <math.h>
+#include <stdio.h>
+
+#define OBJECT_NAME "el.quadpanin~"
+
+static t_class *quadpanin_class = NULL;
+
+typedef struct _quadpanin
+{
+    t_pxobject x_obj;
+} t_quadpanin;
+
+// Prototypes
+void *quadpanin_new(t_symbol *s, short argc, t_atom *argv);
+void  quadpanin_free(t_quadpanin *x);
+void  quadpanin_assist(t_quadpanin *x, void *b, long msg, long arg, char *dst);
+void  quadpanin_dsp64(t_quadpanin *x, t_object *dsp64, short *count, double sr, long n, long flags);
+void  quadpanin_perform64(t_quadpanin *x, t_object *dsp64, double **ins,
+                          long numins, double **outs, long numouts, long n,
+                          long flags, void *userparam);
+
+// -------------------------------------------------------------------------
+// Initialization & Lifecycle
+// -------------------------------------------------------------------------
+
+void C74_EXPORT ext_main(void *r)
+{
+    t_class *c = class_new("el.quadpanin~", 
+                           (method)quadpanin_new, 
+                           (method)quadpanin_free, 
+                           sizeof(t_quadpanin), 
+                           0L, 
+                           A_GIMME, 
+                           0);
+
+    class_addmethod(c, (method)quadpanin_dsp64,  "dsp64",  A_CANT, 0);
+    class_addmethod(c, (method)quadpanin_assist, "assist", A_CANT, 0);
+
+    class_dspinit(c);
+    class_register(CLASS_BOX, c);
+    quadpanin_class = c;
+
+    potpourri_announce(OBJECT_NAME);
+}
+
+void *quadpanin_new(t_symbol *s, short argc, t_atom *argv)
+{
+    t_quadpanin *x = (t_quadpanin *)object_alloc(quadpanin_class);
+    if (!x) return NULL;
+
+    dsp_setup((t_pxobject *)x, 3);
+    x->x_obj.z_misc |= Z_NO_INPLACE;
+
+    outlet_new((t_pxobject *)x, "signal"); // Out 1: Left Front
+    outlet_new((t_pxobject *)x, "signal"); // Out 2: Right Front
+    outlet_new((t_pxobject *)x, "signal"); // Out 3: Right Rear
+    outlet_new((t_pxobject *)x, "signal"); // Out 4: Left Rear
+
+    return x;
+}
+
+void quadpanin_free(t_quadpanin *x)
+{
+    dsp_free((t_pxobject *)x);
+}
+
+void quadpanin_assist(t_quadpanin *x, void *b, long msg, long arg, char *dst)
+{
+    if (msg == 1) {
+        switch (arg) {
+            case 0: snprintf(dst, 256, "(signal) Audio Input"); break;
+            case 1: snprintf(dst, 256, "(signal) X Coordinate (0-1)"); break;
+            case 2: snprintf(dst, 256, "(signal) Y Coordinate (0-1)"); break;
+        }
+    } else if (msg == 2) {
+        switch (arg) {
+            case 0: snprintf(dst, 256, "(signal) Output 1 (Front Left)"); break;
+            case 1: snprintf(dst, 256, "(signal) Output 2 (Front Right)"); break;
+            case 2: snprintf(dst, 256, "(signal) Output 3 (Rear Right)"); break;
+            case 3: snprintf(dst, 256, "(signal) Output 4 (Rear Left)"); break;
+        }
+    }
+}
+
+// -------------------------------------------------------------------------
+// DSP Perform Routine
+// -------------------------------------------------------------------------
+
+void quadpanin_dsp64(t_quadpanin *x, t_object *dsp64, short *count, double sr, long n, long flags)
+{
+    if (sr <= 0.0) return;
+    object_method(dsp64, gensym("dsp_add64"), x, quadpanin_perform64, 0, NULL);
+}
+
+void quadpanin_perform64(t_quadpanin *x, t_object *dsp64, double **ins,
+                          long numins, double **outs, long numouts, long n,
+                          long flags, void *userparam)
+{
+    const double *in   = ins[0];
+    const double *Xin  = ins[1];
+    const double *Yin  = ins[2];
+
+    double *out1 = outs[0];
+    double *out2 = outs[1];
+    double *out3 = outs[2];
+    double *out4 = outs[3];
+
+    while (n--) {
+        double xval = *Xin++;
+        double yval = *Yin++;
+
+        // Symmetrical boundary clamping [0.0, 1.0]
+        if (xval < 0.0) xval = 0.0;
+        else if (xval > 1.0) xval = 1.0;
+
+        if (yval < 0.0) yval = 0.0;
+        else if (yval > 1.0) yval = 1.0;
+
+        double xsquared  = xval * xval;
+        double ysquared  = yval * yval;
+        double ix        = 1.0 - xval;
+        double iy        = 1.0 - yval;
+        double ixsquared = ix * ix;
+        double iysquared = iy * iy;
+
+        // Distance from (0, 0) -> Left Rear
+        double gain1 = sqrt(xsquared + ysquared);
+        if (gain1 > 1.0) gain1 = 1.0;
+        gain1 = 1.0 - gain1;
+
+        // Distance from (1, 0) -> Right Rear
+        double gain2 = sqrt(ixsquared + ysquared);
+        if (gain2 > 1.0) gain2 = 1.0;
+        gain2 = 1.0 - gain2;
+
+        // Distance from (0, 1) -> Left Front
+        double gain3 = sqrt(xsquared + iysquared);
+        if (gain3 > 1.0) gain3 = 1.0;
+        gain3 = 1.0 - gain3;
+
+        // Distance from (1, 1) -> Right Front
+        double gain4 = sqrt(ixsquared + iysquared);
+        if (gain4 > 1.0) gain4 = 1.0;
+        gain4 = 1.0 - gain4;
+
+        double input = *in++;
+
+        *out1++ = input * gain3;
+        *out2++ = input * gain4;
+        *out3++ = input * gain2;
+        *out4++ = input * gain1;
+    }
+}
