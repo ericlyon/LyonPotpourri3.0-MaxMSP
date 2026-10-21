@@ -125,3 +125,9 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Replaced global `rand()`/`srand()` calls with a thread-safe, instance-local 32-bit XorShift PRNG, eliminating cross-thread contention and fixing complete trigger failure on Windows.
 * Connected `mute` state inspection inside `rtrig_perform64` to enforce true output silence when enabled.
 * Modernized runtime initialization to `ext_main`, standardizing all control messages to 64-bit double precision.
+
+### `el.samm~`
+* Inverted the perform loop hierarchy to process samples before streams, eliminating phase desynchronization across outlets upon incoming reset impulses.
+* Removed redundant `trigger_vec` and dead `beats` arrays, eliminating `realloc()` allocations during `dsp64` graph compilation.
+* Registered `samm_free` in `class_new` and added active `mute` state inspection to guarantee output silence.
+
