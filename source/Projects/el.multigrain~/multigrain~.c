@@ -148,7 +148,7 @@ int C74_EXPORT main(void)
     class_addmethod(c, (method)multigrain_mute,            "mute",                A_FLOAT, 0);
     class_addmethod(c, (method)multigrain_steady,          "steady",              A_FLOAT, 0);
     class_addmethod(c, (method)multigrain_interpolate_envelope, "interpolate_envelope", A_FLOAT, 0);
-    class_addmethod(c, (method)multigrain_constrain_scale, "constrain_scale",     A_FLOAT, 0);
+//    class_addmethod(c, (method)multigrain_constrain_scale, "constrain_scale",     A_FLOAT, 0);
     class_addmethod(c, (method)multigrain_grist,           "grist",               A_GIMME, 0);
     class_addmethod(c, (method)multigrain_grain,           "grain",               A_GIMME, 0);
     class_addmethod(c, (method)multigrain_setscale,        "setscale",            A_GIMME, 0);
