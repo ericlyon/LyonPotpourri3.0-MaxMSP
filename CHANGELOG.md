@@ -142,3 +142,9 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Added constructor bounds validation to prevent empty instantiation crashes and out-of-bounds assist tooltip dereferencing.
 * Modernized runtime initialization to `ext_main`, standardizing `length` as an integer and vectorizing outlet clearing with `memset`.
 
+### `el.shoehorn~`
+* Registered `shoehorn_free` in `class_new` to release spatial panning tables and eradicate persistent heap leaks.
+* Eliminated the redundant `inarr` heap buffer and enforced `Z_NO_INPLACE` signal isolation to read inputs in-register.
+* Unified output accumulation and vectorized channel clearing with `memset`, resolving downmixing calculation hazards.
+
+
