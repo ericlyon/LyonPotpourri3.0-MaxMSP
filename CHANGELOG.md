@@ -180,5 +180,9 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Added missing null-pointer guards for `buffer_locksamples` and protected taper envelopes against division-by-zero.
 * Registered `stutter_free` in `class_new` to deallocate loop storage arrays and release `l_buf`.
 
-
+### `el.vdb~`
+* Replaced unsafe audio-thread `outlet_float` invocations with a deferred `t_clock`, eliminating priority inversions and thread deadlocks.
+* Hoisted `buffer_ref_set` out of `perform64` and added null-pointer checks for `buffer_locksamples` to prevent audio crashes.
+* Registered `vdb_free` in `class_new` to deallocate the `connections` array, `phase_clock`, and buffer reference on deletion.
+* Added anti-denormal flushing to feedback accumulation and replaced linear subtraction loops with $O(1)$ modulo wrapping.
 
