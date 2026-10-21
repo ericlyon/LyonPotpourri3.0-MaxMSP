@@ -174,4 +174,11 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Implemented dynamic buffer reallocation and window regeneration in `dsp64` when the signal vector size changes.
 * Registered `squash_dsp_free` in `class_new` to deallocate all analysis, synthesis, and overlap-add buffers on object destruction.
 
+### `el.stutter~`
+* Fixed an out-of-bounds memory read and write crash when playing mono buffers or running in single-outlet mode.
+* Replaced the global `rand_state` with an instance-local 32-bit XorShift generator, eliminating cross-instance race conditions and fixing loop timing on Windows.
+* Added missing null-pointer guards for `buffer_locksamples` and protected taper envelopes against division-by-zero.
+* Registered `stutter_free` in `class_new` to deallocate loop storage arrays and release `l_buf`.
+
+
 
