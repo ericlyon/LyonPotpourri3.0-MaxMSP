@@ -1,4 +1,4 @@
-# LyonPotpourri 3.0 — Modernization Changelog
+# LyonPotpourri 3.0.2 — Modernization Changelog
 
 The following externals from the LyonPotpourri package have been updated to support the Cycling '74 Max 8/9 SDK. This release focuses on stability, 64-bit performance, memory safety, and thread-boundary compliance.
 
@@ -198,3 +198,8 @@ The following externals from the LyonPotpourri package have been updated to supp
 * Added missing `buffer_unlocksamples` and `buffer_setdirty` calls in `vdp_copy_to_buffer` to eliminate destination buffer locking.
 * Registered `vdp_free` to deallocate the internal delay line and release destination buffer references on deletion.
 
+### `el.waveshape~`
+* Registered `waveshape_free` in `class_new` to reclaim over 1 megabyte of heap memory previously leaked on every object deletion.
+* Bound list message input to `WS_MAXHARMS`, preventing heap buffer overflows from incoming lists with more than 256 coefficients.
+* Clamped Chebyshev polynomial evaluation inputs to $[-1.0, 1.0]$, eliminating `acos()` domain errors and `NaN` table collapse.
+* Bound the `mute` message and implemented active output silencing in `perform64`.
