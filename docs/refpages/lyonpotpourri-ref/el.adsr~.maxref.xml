@@ -1,197 +1,189 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
-
 <?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
 
-<c74object name="el.adsr~">
+<c74object name="el.adsr~" module="msp" category="MSP Modifiers">
 	<digest>
 		Click-driven ADSR envelope generator
 	</digest>
 	<description>
-An ADSR envelope.
+		<o>el.adsr~</o> generates an Attack-Decay-Sustain-Release envelope triggered by a single sample click impulse or a bang message. Stage durations and target gain levels can be modulated via control inlets or object attributes.
 	</description>
+
 	<!--METADATA-->
 	<metadatalist>
-		<metadata name="author">
-			Eric Lyon
-		</metadata>
-		<metadata name="tag">
-			MSP
-		</metadata>
-		<metadata name="tag">
-			MSP Functions
-		</metadata>
+		<metadata name="author">Eric Lyon</metadata>
+		<metadata name="tag">MSP</metadata>
+		<metadata name="tag">MSP Envelopes</metadata>
 	</metadatalist>
+
 	<!--INLETS-->
 	<inletlist>
-		<inlet id="0" name="INLET_NAME">
-			<digest>
-				(signal/bang) trigger
-			</digest>
+		<inlet id="0" type="signal/bang">
+			<digest>Click trigger / bang trigger</digest>
+			<description>
+				Incoming signal click triggers the envelope on the click sample. If the click amplitude is not 1.0, it scales the envelope peak amplitude accordingly. A <m>bang</m> triggers the envelope at the start of the next signal vector.
+			</description>
 		</inlet>
-		<inlet id="1" name="INLET_NAME">
-			<digest>
-				(signal/float) attack
-			</digest>
+		<inlet id="1" type="float">
+			<digest>Attack time (ms)</digest>
+			<description>Sets the attack duration in milliseconds.</description>
+		</inlet>
+		<inlet id="2" type="float">
+			<digest>Decay time (ms)</digest>
+			<description>Sets the decay duration in milliseconds.</description>
+		</inlet>
+		<inlet id="3" type="float">
+			<digest>Sustain time (ms)</digest>
+			<description>Sets the sustain duration in milliseconds.</description>
+		</inlet>
+		<inlet id="4" type="float">
+			<digest>Release time (ms)</digest>
+			<description>Sets the release duration in milliseconds.</description>
+		</inlet>
+		<inlet id="5" type="float">
+			<digest>Gain 1 (Decay level)</digest>
+			<description>Sets the peak amplitude level reached at the end of the attack stage.</description>
+		</inlet>
+		<inlet id="6" type="float">
+			<digest>Gain 2 (Sustain level)</digest>
+			<description>Sets the sustain amplitude level reached at the end of the decay stage.</description>
 		</inlet>
 	</inletlist>
+
 	<!--OUTLETS-->
 	<outletlist>
-		<outlet id="0" name="OUTLET_NAME">
-			<digest>
-				(signal) adsr envelope
-			</digest>
-			<description>
-				TEXT_HERE
-			</description>
-		</outlet>
-		<outlet id="1" name="OUTLET_NAME">
-			<digest>
-				(signal) new envelope trigger
-			</digest>
-			<description>
-				TEXT_HERE
-			</description>
+		<outlet id="0" type="signal">
+			<digest>Envelope signal output</digest>
+			<description>The generated ADSR envelope waveform.</description>
 		</outlet>
 	</outletlist>
+
 	<!--ARGUMENTS-->
 	<objarglist>
-		<objarg name="parameters (6 floats)" type="list" optional="1">
-			<digest>
-				TEXT_HERE
-			</digest>
-			<description>
-				Attack, decay, sustain, release, peak gain, sustain gain
-			</description>
+		<objarg name="attack" optional="1" type="float">
+			<digest>Attack time in milliseconds</digest>
+			<description>Initial attack time in milliseconds (default: 10.0 ms).</description>
+		</objarg>
+		<objarg name="decay" optional="1" type="float">
+			<digest>Decay time in milliseconds</digest>
+			<description>Initial decay time in milliseconds (default: 50.0 ms).</description>
+		</objarg>
+		<objarg name="sustain" optional="1" type="float">
+			<digest>Sustain time in milliseconds</digest>
+			<description>Initial sustain time in milliseconds (default: 100.0 ms).</description>
+		</objarg>
+		<objarg name="release" optional="1" type="float">
+			<digest>Release time in milliseconds</digest>
+			<description>Initial release time in milliseconds (default: 100.0 ms).</description>
+		</objarg>
+		<objarg name="gain1" optional="1" type="float">
+			<digest>Decay gain level</digest>
+			<description>Peak gain level reached at the end of the attack stage (default: 0.7).</description>
+		</objarg>
+		<objarg name="gain2" optional="1" type="float">
+			<digest>Sustain gain level</digest>
+			<description>Sustain gain level reached at the end of the decay stage (default: 0.1).</description>
 		</objarg>
 	</objarglist>
+
 	<!--MESSAGES-->
 	<methodlist>
+		<method name="bang">
+			<digest>Trigger envelope</digest>
+			<description>
+				Triggers the envelope at unity gain at the start of the next signal vector.
+			</description>
+		</method>
 		<method name="list">
 			<arglist>
-				<arg name="ADSR" type="list" optional="0" id="0" />
+				<arg name="durations" type="list" optional="0" id="0" />
 			</arglist>
-			<digest>
-				TEXT_HERE
-			</digest>
+			<digest>Set stage durations</digest>
 			<description>
-				Attack, decay, sustain, release
+				A list of 4 float values sets the attack, decay, sustain, and release durations in milliseconds.
 			</description>
 		</method>
 		<method name="mute">
 			<arglist>
-				<arg name="status" type="long" optional="0" id="0" />
+				<arg name="state" type="float" optional="0" id="0" />
 			</arglist>
-			<digest>
-				TEXT_HERE
-			</digest>
+			<digest>Mute signal output</digest>
 			<description>
-				Turn object's DSP on (0) or off (1).
+				A non-zero value mutes the DSP output, outputting pure silence (0.0). A value of 0 un-mutes the object.
 			</description>
 		</method>
 	</methodlist>
+
 	<!--ATTRIBUTES-->
 	<attributelist>
-		<attribute name="Attack Time" get="1" set="1" type="atom" size="10">
-			<digest>
-				Attack Time
-			</digest>
-			<description>
-				Sets the attack of the ADSR-envelope in milliseconds.
-			</description>
+		<attribute name="attack" get="1" set="1" type="float64" size="1">
+			<digest>Attack Time</digest>
+			<description>Attack stage duration in milliseconds.</description>
 			<attributelist>
-				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Attack Time" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Attack Time (ms)" />
 				<attribute name="style" get="1" set="1" type="symbol" size="1" value="time" />
-				<attribute name="units" get="1" set="1" type="atom" size="7" value="ms" />
+				<attribute name="units" get="1" set="1" type="symbol" size="1" value="ms" />
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="20" />
+				<attribute name="order" get="1" set="1" type="symbol" size="1" value="1" />
 			</attributelist>
 		</attribute>
-		<attribute name="Decay Time" get="1" set="1" type="atom" size="10">
-			<digest>
-				Attack Time
-			</digest>
-			<description>
-				Sets the decay of the ADSR-envelope in milliseconds.
-			</description>
+		<attribute name="decay" get="1" set="1" type="float64" size="1">
+			<digest>Decay Time</digest>
+			<description>Decay stage duration in milliseconds.</description>
 			<attributelist>
-				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Decay Time" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Decay Time (ms)" />
 				<attribute name="style" get="1" set="1" type="symbol" size="1" value="time" />
-				<attribute name="units" get="1" set="1" type="atom" size="7" value="ms" />
+				<attribute name="units" get="1" set="1" type="symbol" size="1" value="ms" />
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="50" />
+				<attribute name="order" get="1" set="1" type="symbol" size="1" value="2" />
 			</attributelist>
 		</attribute>
-		<attribute name="Sustain Time" get="1" set="1" type="atom" size="10">
-			<digest>
-				Attack Time
-			</digest>
-			<description>
-				Sets the sustain of the ADSR-envelope in milliseconds.
-			</description>
+		<attribute name="sustain" get="1" set="1" type="float64" size="1">
+			<digest>Sustain Time</digest>
+			<description>Sustain stage duration in milliseconds.</description>
 			<attributelist>
-				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Sustain Time" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Sustain Time (ms)" />
 				<attribute name="style" get="1" set="1" type="symbol" size="1" value="time" />
-				<attribute name="units" get="1" set="1" type="atom" size="7" value="ms" />
+				<attribute name="units" get="1" set="1" type="symbol" size="1" value="ms" />
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="150" />
+				<attribute name="order" get="1" set="1" type="symbol" size="1" value="3" />
 			</attributelist>
 		</attribute>
-		<attribute name="Release Time" get="1" set="1" type="atom" size="10">
-			<digest>
-				Attack Time
-			</digest>
-			<description>
-				Sets the release of the ADSR-envelope in milliseconds.
-			</description>
+		<attribute name="release" get="1" set="1" type="float64" size="1">
+			<digest>Release Time</digest>
+			<description>Release stage duration in milliseconds.</description>
 			<attributelist>
-				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Release Time" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Release Time (ms)" />
 				<attribute name="style" get="1" set="1" type="symbol" size="1" value="time" />
-				<attribute name="units" get="1" set="1" type="atom" size="7" value="ms" />
+				<attribute name="units" get="1" set="1" type="symbol" size="1" value="ms" />
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="200" />
+				<attribute name="order" get="1" set="1" type="symbol" size="1" value="4" />
 			</attributelist>
 		</attribute>
-		<attribute name="Gain 1" get="1" set="1" type="atom" size="10">
-			<digest>
-				Attack Time
-			</digest>
-			<description>
-				Sets the peak gain of the envelope.
-			</description>
+		<attribute name="gain1" get="1" set="1" type="float64" size="1">
+			<digest>Gain 1 (Decay Level)</digest>
+			<description>Peak gain level reached at the end of the attack stage.</description>
 			<attributelist>
-				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Gain 1" />
-				<attribute name="units" get="1" set="1" type="atom" size="7" value="ms" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Gain 1 (Decay Level)" />
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="1.0" />
+				<attribute name="order" get="1" set="1" type="symbol" size="1" value="5" />
 			</attributelist>
 		</attribute>
-		<attribute name="Gain 2" get="1" set="1" type="atom" size="10">
-			<digest>
-				Attack Time
-			</digest>
-			<description>
-				Sets the sustain gain of the envelope.
-			</description>
+		<attribute name="gain2" get="1" set="1" type="float64" size="1">
+			<digest>Gain 2 (Sustain Level)</digest>
+			<description>Sustain gain level maintained during the sustain stage.</description>
 			<attributelist>
-				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Gain 2" />
-				<attribute name="units" get="1" set="1" type="atom" size="7" value="ms" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Gain 2 (Sustain Level)" />
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="0.7" />
+				<attribute name="order" get="1" set="1" type="symbol" size="1" value="6" />
 			</attributelist>
 		</attribute>
 	</attributelist>
-	<!--EXAMPLE-->
 
 	<!--SEEALSO-->
 	<seealsolist>
-		<seealso name="el.latch~" />
 		<seealso name="adsr~" />
+		<seealso name="el.sigseq~" />
+		<seealso name="el.rtrig~" />
 	</seealsolist>
-	<misc name="Input">
-		<entry name="signal">
-			<description>
-				A click triggers the envelope on the click sample.
-			</description>
-		</entry>
-		<entry name="bang">
-			<description>
-				A bang triggers the envelope, but timing accuracy is limited by the MSP vector size, unlike using a signal click.
-			</description>
-		</entry>
-	</misc>
-	<misc name="Output">
-		<entry name="signal">
-			<description>
-				Left outlet: the envelope.
-			</description>
-		</entry>
-	</misc>
 </c74object>
