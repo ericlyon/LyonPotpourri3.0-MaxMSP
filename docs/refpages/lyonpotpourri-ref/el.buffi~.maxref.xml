@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="el.buffi~" module="msp" category="MSP Buffers">
+    <digest>
+        Dynamic buffer interpolation and function generation
+    </digest>
+    <description>
+        <o>el.buffi~</o> performs sample-accurate linear interpolation between two source <o>buffer~</o> objects, writing the result into a destination buffer. It also provides several algorithmic methods for generating transfer functions (warping curves) directly into an existing buffer.
+    </description>
+
+    <metadatalist>
+        <metadata name="author">Eric Lyon</metadata>
+        <metadata name="tag">MSP</metadata>
+        <metadata name="tag">LyonPotpourri</metadata>
+        <metadata name="tag">Buffer Manipulation</metadata>
+    </metadatalist>
+
+    <!--INLETS-->
+    <inletlist>
+        <inlet id="0" type="signal">
+            <digest>Interpolation phase [0.0 - 1.0]</digest>
+            <description>
+                A control signal from 0.0 to 1.0. 
+                When the input signal is 1.0, the output buffer will contain the data from 'src1'. 
+                When the input signal is 0.0, the output buffer will contain the data from 'src2'. 
+                Values between 0.0 and 1.0 perform a linear interpolation between the two source buffers.
+            </description>
+        </inlet>
+    </inletlist>
+
+    <!--OUTLETS-->
+    <outletlist>
+        <outlet id="0" type="signal">
+            <digest>Pass-through</digest>
+            <description>Pass-through of the input interpolation phase.</description>
+        </outlet>
+    </outletlist>
+
+    <!--ARGUMENTS-->
+    <objarglist>
+        <objarg name="src1" type="symbol" optional="0">
+            <digest>Source Buffer 1</digest>
+            <description>The name of the first source <o>buffer~</o>.</description>
+        </objarg>
+        <objarg name="src2" type="symbol" optional="0">
+            <digest>Source Buffer 2</digest>
+            <description>The name of the second source <o>buffer~</o>.</description>
+        </objarg>
+        <objarg name="dest" type="symbol" optional="0">
+            <digest>Destination Buffer</digest>
+            <description>The name of the destination <o>buffer~</o>.</description>
+        </objarg>
+    </objarglist>
+
+    <!--MESSAGES-->
+    <methodlist>
+        <method name="reset">
+            <arglist>
+                <arg name="src1" type="symbol" optional="0" />
+                <arg name="src2" type="symbol" optional="0" />
+                <arg name="dest" type="symbol" optional="0" />
+            </arglist>
+            <digest>Reset buffer names</digest>
+            <description>Re-bind the object to new source and destination buffers.</description>
+        </method>
+        <method name="autofunc">
+            <arglist>
+                <arg name="min" type="float" optional="0" />
+                <arg name="max" type="float" optional="0" />
+                <arg name="buffer" type="symbol" optional="0" />
+            </arglist>
+            <digest>Generate random linear segments</digest>
+            <description>Generates a buffer transfer function using randomized linear segments between min and max values.</description>
+        </method>
+        <method name="autoexpfunc">
+            <arglist>
+                <arg name="min" type="float" optional="0" />
+                <arg name="max" type="float" optional="0" />
+                <arg name="buffer" type="symbol" optional="0" />
+            </arglist>
+            <digest>Generate random exponential segments</digest>
+            <description>Generates a buffer transfer function using randomized exponential segments.</description>
+        </method>
+        <method name="autocurvefunc">
+            <arglist>
+                <arg name="min" type="float" optional="0" />
+                <arg name="max" type="float" optional="0" />
+                <arg name="slope" type="float" optional="0" />
+                <arg name="buffer" type="symbol" optional="0" />
+            </arglist>
+            <digest>Generate random power-curve segments</digest>
+            <description>Generates a buffer transfer function using randomized power-curve segments.</description>
+        </method>
+        <method name="autospike">
+            <arglist>
+                <arg name="min" type="float" optional="0" />
+                <arg name="max" type="float" optional="0" />
+                <arg name="odds" type="float" optional="0" />
+                <arg name="buffer" type="symbol" optional="0" />
+            </arglist>
+            <digest>Generate random spikes</digest>
+            <description>Populates a buffer with random impulses based on provided density odds.</description>
+        </method>
+    </methodlist>
+
+    <seealsolist>
+        <seealso name="buffer~" />
+        <seealso name="peek~" />
+        <seealso name="el.buffet~" />
+    </seealsolist>
+</c74object>
