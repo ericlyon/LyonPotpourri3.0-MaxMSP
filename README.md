@@ -14,12 +14,15 @@ LyonPotpourri is Copyright Eric Lyon, 1999-2025, and is covered under the MIT li
 - chameleon~ an oracular sound processor
 - channel~ access to a precise address in the signal vector
 - chopper~ munging loop playback from a buffer
+- clean_gate~ provides cross-fades for smooth switching among audio channels
 - clean_selector~ like selector~ but crossfades when switching channels
 - click2float~ translates a signal click to a float message
 - clickhold~ sample and hold a click
 - convolver~ non-real-time convolution with impulses of arbitrary size
+- counter~ a click-triggered counter
 - distortion~ lookup function distortion
 - dmach~ pattern based sample accurate drum machine prototype
+- dynss~ implements dynamic stochastic synthesis as described by Xenakis in Formalized Music
 - epluribus~ combine several signal inputs to a single output based on min or max sample value
 - expflam~ converts a click to an exponential flam click pattern
 - flanjah~ simple flanger
@@ -33,6 +36,7 @@ LyonPotpourri is Copyright Eric Lyon, 1999-2025, and is covered under the MIT li
 - magfreq_analysis~ transforms a time domain signal to a magnitude/frequency spectrum
 - markov~ implements a first order Markov chain
 - mask~ a click driven pattern sequencer
+- multigrain~ is a granular synthesis engine with an arbitrary number of output channels
 - npan~ power-panning to an arbitrary number of output channels
 - oscil~ oscillator with flexible waveform specification
 - phasemod~ phase modulated waveform
@@ -51,6 +55,7 @@ LyonPotpourri is Copyright Eric Lyon, 1999-2025, and is covered under the MIT li
 - squash~ implementation of a compression algorithm by Christopher Penrose
 - stutter~ stuttering playback from a buffer
 - vdb~ a delay line using an array for storage (no vector limit on feedback delaytime)
+- vdel~ a delay line with an internal oscillator to control the delay time
 - vdp~ a simple, self-contained delay unit
 - waveshape~ a Chebychev function lookup waveshaper
 
@@ -62,4 +67,4 @@ School of Performing Arts | Music<br>
 Institute for Creativity, Arts, and Technology<br>
 Virginia Tech. 
 
-August 14, 2025
+October 21, 2026
