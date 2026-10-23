@@ -1,12 +1,23 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
 
-<c74object name="el.buffi~" module="msp" category="MSP Buffers">
+<c74object name="el.buffi~" module="msp" category="MSP Buffers" numinlets="1" numoutlets="1">
     <digest>
         Dynamic buffer interpolation and function generation
     </digest>
     <description>
         <o>el.buffi~</o> performs sample-accurate linear interpolation between two source <o>buffer~</o> objects, writing the result into a destination buffer. It also provides several algorithmic methods for generating transfer functions (warping curves) directly into an existing buffer.
+        <br />
+        
+        <h5>Inlets</h5>
+        <ul>
+            <li><b>Left Inlet (signal):</b> Interpolation phase [0.0 - 1.0]. A control signal from 0.0 to 1.0. When the input signal is 1.0, the output buffer will contain data from 'src1'. When 0.0, it contains 'src2'. Intermediate values perform a linear interpolation between the source buffers.</li>
+        </ul>
+
+        <h5>Outlets</h5>
+        <ul>
+            <li><b>Left Outlet (signal):</b> Pass-through. Echoes back the input interpolation phase signal.</li>
+        </ul>
     </description>
 
     <metadatalist>
@@ -16,26 +27,6 @@
         <metadata name="tag">Buffer Manipulation</metadata>
     </metadatalist>
 
-    <!--INLETS-->
-    <inletlist>
-        <inlet id="0" type="signal">
-            <digest>Interpolation phase [0.0 - 1.0]</digest>
-            <description>
-                A control signal from 0.0 to 1.0. 
-                When the input signal is 1.0, the output buffer will contain the data from 'src1'. 
-                When the input signal is 0.0, the output buffer will contain the data from 'src2'. 
-                Values between 0.0 and 1.0 perform a linear interpolation between the two source buffers.
-            </description>
-        </inlet>
-    </inletlist>
-
-    <!--OUTLETS-->
-    <outletlist>
-        <outlet id="0" type="signal">
-            <digest>Pass-through</digest>
-            <description>Pass-through of the input interpolation phase.</description>
-        </outlet>
-    </outletlist>
 
     <!--ARGUMENTS-->
     <objarglist>
