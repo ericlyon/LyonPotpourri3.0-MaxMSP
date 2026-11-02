@@ -1,0 +1,425 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="el.multigrain~" module="msp" category="LyonPotpourri">
+	<digest>
+		Multi-channel soundfile buffer granular synthesizer
+	</digest>
+	<description>
+		<o>el.multigrain~</o> is a polyphonic multi-channel granular synthesizer that granulates recorded audio from a mono or stereo soundfile buffer using an envelope window stored in a second buffer. Grains are distributed dynamically across an arbitrary array of discrete audio output channels (from 2 up to any user-specified count). Grains can be assigned across a continuous channel range (<m>chanrange</m>) or constrained to specific speaker subsets (<m>setgroup</m>). It supports stereo buffer decoding with flexible multi-channel routing modes (<at>mixmode</at>), user-defined skip windows (<m>minskip</m>, <m>maxskip</m>), bidirectional grain playback (<m>retro_odds</m>), microtonal pitch scales (<m>setscale</m>), and stochastic clouds of up to 512 simultaneous grains. Double-clicking the object opens inspection windows for both buffers.
+
+		<br />
+		<h5>Inlets</h5>
+		<ul>
+			<li><b>Inlet 1 [Left Inlet] (messages):</b> Control inlet. Accepts all synthesis commands, grain triggers (<m>spray</m>, <m>pitchspray</m>, <m>grain</m>), buffer reassignments, skip limits, and spatial routing messages (<m>chanrange</m>, <m>setgroup</m>, <m>grist</m>, etc.).</li>
+		</ul>
+
+		<h5>Outlets</h5>
+		<ul>
+			<li><b>Outlets 1 to N (signal):</b> Discrete audio signal outputs (total channel count specified by the third argument, default: 2). Grains are routed to individual output channels based on active channel range or group settings.</li>
+		</ul>
+	</description>
+
+	<!--METADATA-->
+	<metadatalist>
+		<metadata name="author">
+			Eric Lyon
+		</metadata>
+		<metadata name="tag">
+			MSP
+		</metadata>
+		<metadata name="tag">
+			LyonPotpourri
+		</metadata>
+		<metadata name="tag">
+			Granular
+		</metadata>
+		<metadata name="tag">
+			Spatialization
+		</metadata>
+		<metadata name="tag">
+			Buffer
+		</metadata>
+	</metadatalist>
+
+	<!--INLETS-->
+	<inletlist>
+		<inlet id="0" type="messages">
+			<digest>
+				(messages) Granular control commands
+			</digest>
+			<description>
+				Receives messages to configure granulation boundaries, assign spatial output channels, define pitch scales, set skip boundaries, and trigger grains or clouds.
+			</description>
+		</inlet>
+	</inletlist>
+
+	<!--OUTLETS-->
+	<outletlist>
+		<outlet id="0" type="signal">
+			<digest>
+				(signal) Audio Output Channel 1
+			</digest>
+			<description>
+				First discrete audio output channel.
+			</description>
+		</outlet>
+		<outlet id="1" type="signal">
+			<digest>
+				(signal) Audio Output Channel 2 ... N
+			</digest>
+			<description>
+				Subsequent discrete audio output channels (up to the allocated channel count).
+			</description>
+		</outlet>
+	</outletlist>
+
+	<!--ARGUMENTS-->
+	<objarglist>
+		<objarg name="soundfile-buffer" type="symbol" optional="0">
+			<digest>
+				Source soundfile buffer
+			</digest>
+			<description>
+				Required. The name of the <o>buffer~</o> containing the audio to be granulated (mono or stereo).
+			</description>
+		</objarg>
+		<objarg name="envelope-buffer" type="symbol" optional="0">
+			<digest>
+				Grain envelope buffer
+			</digest>
+			<description>
+				Required. The name of the single-channel (mono) <o>buffer~</o> containing the grain envelope window.
+			</description>
+		</objarg>
+		<objarg name="output-channels" type="int" optional="1">
+			<digest>
+				Number of audio output channels
+			</digest>
+			<description>
+				The number of discrete signal outputs to create (default: 2, minimum: 1).
+			</description>
+		</objarg>
+	</objarglist>
+
+	<!--MESSAGES-->
+	<methodlist>
+		<method name="chanrange">
+			<arglist>
+				<arg name="channel-boundaries" type="list" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Restrict output to contiguous channel range
+			</digest>
+			<description>
+				Sets a contiguous range of active output channels as a 2-element list: <m>[min_channel, max_channel]</m> (0-indexed). Grains will be randomly routed within these channel boundaries. Clears any active <m>setgroup</m> configuration.
+			</description>
+		</method>
+
+		<method name="events">
+			<arglist>
+				<arg name="count" type="int" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Set grains per spray trigger
+			</digest>
+			<description>
+				Sets the number of grains generated on each call to <m>spray</m> or <m>pitchspray</m>.
+			</description>
+		</method>
+
+		<method name="grain">
+			<arglist>
+				<arg name="parameters" type="list" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Trigger an individual grain
+			</digest>
+			<description>
+				Deploys a single grain with explicit parameters as a 5-element list: <m>[duration_ms, increment, amplitude, pan, skip_ms]</m>. Pan ranges from 0.0 to 1.0, mapped across all output channels. Audio processing must be running to receive this message.
+			</description>
+		</method>
+
+		<method name="grist">
+			<arglist>
+				<arg name="cloud-parameters" type="list" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Configure global cloud boundaries
+			</digest>
+			<description>
+				Sets parameters for <m>spray</m> and <m>pitchspray</m> using a 10-element list:
+				<br />• <b>events:</b> Number of grains generated per trigger.
+				<br />• <b>horizon_ms:</b> Time window (in milliseconds) across which grains are distributed.
+				<br />• <b>min_incr / max_incr:</b> Minimum and maximum playback speed/transposition increment bounds.
+				<br />• <b>minpan / maxpan:</b> Reserved panning range parameters.
+				<br />• <b>minamp / maxamp:</b> Grain peak amplitude range.
+				<br />• <b>mindur_ms / maxdur_ms:</b> Grain duration range (milliseconds).
+			</description>
+		</method>
+
+		<method name="highblock">
+			<arglist>
+				<arg name="cutoff-increment" type="float" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Set high-increment hard limit
+			</digest>
+			<description>
+				Sets a hard upper limit for playback increments. Any grain calculated with an increment above this value is aborted.
+			</description>
+		</method>
+
+		<method name="info">
+			<arglist />
+			<digest>
+				Print status report to console
+			</digest>
+			<description>
+				Prints the number of currently active grains, assigned buffer names, and active <m>maxskip</m> settings to the Max Console.
+			</description>
+		</method>
+
+		<method name="interpolate">
+			<arglist>
+				<arg name="toggle" type="int" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Toggle soundfile interpolation
+			</digest>
+			<description>
+				When set to 1 (default), linear interpolation is used when reading from the soundfile buffer. When set to 0, nearest-sample truncation is used.
+			</description>
+		</method>
+
+		<method name="interpolate_envelope">
+			<arglist>
+				<arg name="toggle" type="int" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Toggle envelope interpolation
+			</digest>
+			<description>
+				When set to 1, linear interpolation is used when reading from the envelope buffer. When set to 0 (default), nearest-sample truncation is used.
+			</description>
+		</method>
+
+		<method name="lowblock">
+			<arglist>
+				<arg name="cutoff-increment" type="float" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Set low-increment hard limit
+			</digest>
+			<description>
+				Sets a hard lower limit for playback increments. Any grain calculated with an increment below this value is aborted.
+			</description>
+		</method>
+
+		<method name="maxskip">
+			<arglist>
+				<arg name="offset-ms" type="float" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Set maximum buffer skip point (ms)
+			</digest>
+			<description>
+				Sets the maximum time offset in milliseconds from which grain start points can be chosen. Setting this to -1 allows sampling across the full length of the soundfile buffer.
+			</description>
+		</method>
+
+		<method name="minskip">
+			<arglist>
+				<arg name="offset-ms" type="float" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Set minimum buffer skip point (ms)
+			</digest>
+			<description>
+				Sets the minimum time offset in milliseconds from which grain start points can be chosen (default: 0.0 ms).
+			</description>
+		</method>
+
+		<method name="mixmode">
+			<arglist>
+				<arg name="mode" type="int" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Set stereo buffer mixing mode
+			</digest>
+			<description>
+				Sets the multi-channel mapping mode when using a stereo soundfile buffer:
+				<br />• <b>0 (Summed Mono):</b> Left and right channels are summed to mono and sent to the selected output channel.
+				<br />• <b>1 (Discrete Stereo):</b> Left channel is sent to the selected output channel, and right channel is sent to the adjacent channel (<m>channel + 1</m>).
+				<br />• <b>2 (Stereo Spread):</b> Left channel is sent to the selected output channel, and right channel wraps to an alternate channel (<m>channel + 2</m>).
+			</description>
+		</method>
+
+		<method name="mute">
+			<arglist>
+				<arg name="toggle" type="int" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Mute synthesis processing
+			</digest>
+			<description>
+				When set to 1, mutes DSP computation and outputs silence across all channels. 0 restores active granulation.
+			</description>
+		</method>
+
+		<method name="nopan">
+			<arglist>
+				<arg name="toggle" type="int" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Toggle pan override
+			</digest>
+			<description>
+				Internal panning override toggle.
+			</description>
+		</method>
+
+		<method name="pitchdev">
+			<arglist>
+				<arg name="deviation" type="float" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Set random pitch deviation for scale
+			</digest>
+			<description>
+				Sets the random pitch deviation multiplier applied to scale increments during <m>pitchspray</m>. Accepts non-negative values (typically 0.0 to 1.0).
+			</description>
+		</method>
+
+		<method name="pitchspray">
+			<arglist />
+			<digest>
+				Trigger scale-quantized grain cloud
+			</digest>
+			<description>
+				Triggers a cloud of grains distributed according to the parameters set in <m>grist</m>, with playback speed increments quantized to the active pitch scale defined by <m>setscale</m>.
+			</description>
+		</method>
+
+		<method name="retro_odds">
+			<arglist>
+				<arg name="probability" type="float" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Probability of reverse grain playback
+			</digest>
+			<description>
+				Sets the probability (0.0 to 1.0) that any given grain will play backwards through the soundfile buffer (default: 0.0).
+			</description>
+		</method>
+
+		<method name="seed">
+			<arglist>
+				<arg name="seed-value" type="int" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Set random seed
+			</digest>
+			<description>
+				Seeds the pseudo-random number generator for reproducible grain timing, pitch, and channel distributions.
+			</description>
+		</method>
+
+		<method name="setbuf">
+			<arglist>
+				<arg name="soundfile-buffer" type="symbol" optional="0" id="0" />
+				<arg name="envelope-buffer" type="symbol" optional="0" id="1" />
+			</arglist>
+			<digest>
+				Reassign source and envelope buffers
+			</digest>
+			<description>
+				Changes the source soundfile buffer (mono or stereo) and grain envelope window buffer (mono).
+			</description>
+		</method>
+
+		<method name="setgroup">
+			<arglist>
+				<arg name="channel-list" type="list" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Assign arbitrary output channel group
+			</digest>
+			<description>
+				Specifies a discrete list of output channel numbers (0-indexed). Grains will be randomly distributed only among the channels listed in this group.
+			</description>
+		</method>
+
+		<method name="setscale">
+			<arglist>
+				<arg name="increments" type="list" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Define increment pitch scale
+			</digest>
+			<description>
+				Defines the pitch scale as a series of playback speed/transposition increment multipliers (requires at least 2 increments, up to 8192).
+			</description>
+		</method>
+
+		<method name="spray">
+			<arglist />
+			<digest>
+				Trigger random-pitch grain cloud
+			</digest>
+			<description>
+				Triggers a cloud of grains distributed according to the parameters set in <m>grist</m>, with random playback increments chosen continuously between <m>min_incr</m> and <m>max_incr</m>.
+			</description>
+		</method>
+
+		<method name="steady">
+			<arglist>
+				<arg name="toggle" type="int" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Toggle pulsed grain timing
+			</digest>
+			<description>
+				When set to 1, grain start times are evenly spaced across the horizon window (<m>horizon / events</m>). When set to 0 (default), grain onset delays are distributed randomly.
+			</description>
+		</method>
+
+		<method name="transpose">
+			<arglist>
+				<arg name="factor" type="float" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Set global transposition factor
+			</digest>
+			<description>
+				Master playback speed multiplier applied to all grains regardless of scale or random increment settings (default: 1.0).
+			</description>
+		</method>
+	</methodlist>
+
+	<!--ATTRIBUTES-->
+	<attributelist>
+		<attribute name="mixmode" get="1" set="1" type="int" size="1">
+			<digest>
+				Stereo buffer mixing mode
+			</digest>
+			<description>
+				Selects how stereo soundfile buffers are mapped to the multi-channel outputs:
+				<br />• <b>0:</b> Summed Mono (default)
+				<br />• <b>1:</b> Discrete Stereo
+				<br />• <b>2:</b> Stereo Spread
+			</description>
+		</attribute>
+	</attributelist>
+
+	<!--SEEALSO-->
+	<seealsolist>
+		<seealso name="el.granulesf~" />
+		<seealso name="el.granule~" />
+		<seealso name="el.npan~" />
+		<seealso name="buffer~" />
+		<seealso name="waveform~" />
+		<seealso name="groove~" />
+	</seealsolist>
+
+</c74object>

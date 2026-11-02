@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="el.rotapan~" module="msp" category="LyonPotpourri">
+	<digest>
+		Multi-channel circular rotation panner
+	</digest>
+	<description>
+		<o>el.rotapan~</o> is a multi-channel circular rotation panner that rotates an entire multi-channel audio field across an equal number of speaker outputs (from 2 to 1024 channels). Unlike <o>el.npan~</o> (which pans a single mono input across an array of speakers), <o>el.rotapan~</o> preserves the relative spatial relationships among all incoming audio channels and rotates the entire multi-channel soundfield continuously using equal-power crossfading. Rotation is controlled at audio rate by a signal in the rightmost inlet ranging from 0.0 to 1.0, with seamless circular wrapping.
+
+		<br />
+		<h5>Inlets</h5>
+		<ul>
+			<li><b>Inlets 1 to N (signal):</b> Audio input channels 1 through N (total channels determined by the object argument, default: 2).</li>
+			<li><b>Rightmost Inlet [Inlet N+1] (signal):</b> Pan rotation controller (0.0 to 1.0). Controls the circular rotation offset of the entire multichannel field around the speaker array. Values wrap smoothly and circularly.</li>
+		</ul>
+
+		<h5>Outlets</h5>
+		<ul>
+			<li><b>Outlets 1 to N (signal):</b> Rotated audio output channels 1 through N.</li>
+		</ul>
+	</description>
+
+	<!--METADATA-->
+	<metadatalist>
+		<metadata name="author">
+			Eric Lyon
+		</metadata>
+		<metadata name="tag">
+			MSP
+		</metadata>
+		<metadata name="tag">
+			LyonPotpourri
+		</metadata>
+		<metadata name="tag">
+			Spatialization
+		</metadata>
+		<metadata name="tag">
+			Panning
+		</metadata>
+	</metadatalist>
+
+	<!--INLETS-->
+	<inletlist>
+		<inlet id="0" type="signal">
+			<digest>
+				(signal) Audio input channels 1 ... N
+			</digest>
+			<description>
+				Incoming audio signals to be spatially rotated.
+			</description>
+		</inlet>
+		<inlet id="1" type="signal">
+			<digest>
+				(signal) Pan rotation controller [0.0 - 1.0]
+			</digest>
+			<description>
+				Normalized audio-rate signal controlling circular rotation position around the speaker ring (0.0 to 1.0). Values wrap continuously around the array.
+			</description>
+		</inlet>
+	</inletlist>
+
+	<!--OUTLETS-->
+	<outletlist>
+		<outlet id="0" type="signal">
+			<digest>
+				(signal) Audio output channels 1 ... N
+			</digest>
+			<description>
+				Rotated multi-channel audio output signals.
+			</description>
+		</outlet>
+	</outletlist>
+
+	<!--ARGUMENTS-->
+	<objarglist>
+		<objarg name="channel-count" type="int" optional="1">
+			<digest>
+				Number of channels
+			</digest>
+			<description>
+				The number of audio input and output channels in the circular array (default: 2, range: 2 to 1024).
+			</description>
+		</objarg>
+	</objarglist>
+
+	<!--MESSAGES-->
+	<methodlist>
+		<method name="signal">
+			<arglist />
+			<digest>
+				Audio inputs or rotation control signal
+			</digest>
+			<description>
+				Signals arriving at inlets 1 through N are the multi-channel audio to be rotated. The signal arriving at the rightmost inlet continuously modulates the circular rotation offset at audio rate.
+			</description>
+		</method>
+	</methodlist>
+
+	<!--ATTRIBUTES-->
+	<attributelist>
+	</attributelist>
+
+	<!--SEEALSO-->
+	<seealsolist>
+		<seealso name="el.npan~" />
+		<seealso name="el.quadpanin~" />
+		<seealso name="matrix~" />
+	</seealsolist>
+
+</c74object>

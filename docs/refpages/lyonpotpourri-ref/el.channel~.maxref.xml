@@ -12,13 +12,13 @@
 		<br />
 		<h5>Inlets</h5>
 		<ul>
-			<li><b>Left Inlet (signal/int/float):</b> Incoming audio signal vector to sample, or an integer/float value to update the target index.</li>
-			<li><b>Right Inlet (int):</b> Target sample channel/index position within the incoming vector.</li>
+			<li><b>Left Inlet (signal/float/int):</b> (signal) Input Vector to sample, or integer/float index updates.</li>
+			<li><b>Right Inlet (int):</b> (int) Target Sample Index within Vector.</li>
 		</ul>
 
 		<h5>Outlets</h5>
 		<ul>
-			<li><b>Left Outlet (signal):</b> Extracted channel value distributed across the output signal vector. Outputs 0.0 if the index is out of bounds.</li>
+			<li><b>Left Outlet (signal):</b> (signal) Extracted Channel Value distributed continuously across the output vector. Outputs 0.0 if index is out of bounds.</li>
 		</ul>
 	</description>
 	
@@ -31,15 +31,24 @@
 	
 	<!--INLETS-->
 	<inletlist>
+		<inlet id="0" type="signal/float/int">
+			<digest>Incoming audio vector or index updates</digest>
+		</inlet>
+		<inlet id="1" type="int">
+			<digest>Target sample index within vector</digest>
+		</inlet>
 	</inletlist>
 	
 	<!--OUTLETS-->
 	<outletlist>
+		<outlet id="0" type="signal">
+			<digest>Extracted constant channel value signal</digest>
+		</outlet>
 	</outletlist>
 	
 	<!--ARGUMENTS-->
 	<objarglist>
-		<objarg name="channel" type="int" optional="0">
+		<objarg name="channel" type="int" optional="1">
 			<digest>
 				Initial target sample index
 			</digest>
@@ -59,7 +68,18 @@
 				Set the target sample index via integer
 			</digest>
 			<description>
-				Changes the sample index location to extract from the vector. Sent to the left inlet or the right inlet (`in1`), it updates the active index directly.
+				Changes the sample index location to extract from the vector. Sent to the left inlet, it updates the active extraction index directly.
+			</description>
+		</method>
+		<method name="in1">
+			<arglist>
+				<arg name="channel number" type="int" optional="0" id="0" />
+			</arglist>
+			<digest>
+				Set the target sample index via the right inlet
+			</digest>
+			<description>
+				Internal message redirection mapping to the integer received via the proxy right inlet. Updates the target sample index.
 			</description>
 		</method>
 		<method name="channel">
@@ -70,7 +90,7 @@
 				Set the target sample index via float
 			</digest>
 			<description>
-				Set the location inside the buffer to peek. The float value is truncated to a long index integer internally. This value should be between 0 to (N-1) inclusive where N is the Signal Vector Size.
+				Set the location inside the buffer to peek via float. The float value is truncated to a long index integer internally. This value must be positive.
 			</description>
 		</method>
 	</methodlist>
